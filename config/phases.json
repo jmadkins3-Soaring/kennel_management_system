@@ -1,0 +1,7 @@
+{
+  "_comment": "Phase window start times (24-hour HH:MM). Night is 00:00-05:59. Morning 06:00-11:59. Afternoon 12:00-17:59. Evening 18:00-23:59.",
+  "morning_start":   "06:00",
+  "afternoon_start": "12:00",
+  "evening_start":   "18:00",
+  "night_start":     "00:00"
+}

@@ -1,0 +1,43 @@
+.ctx-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+}
+
+.ctx-menu {
+  position: fixed;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  z-index: 501;
+  min-width: 200px;
+  overflow: hidden;
+}
+
+.ctx-header {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-sub);
+  background: #fafafa;
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.ctx-item {
+  display: block;
+  width: 100%;
+  padding: 9px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f5;
+}
+.ctx-item:last-child { border-bottom: none; }
+.ctx-item:hover:not(:disabled) { background: #f5f9ff; color: #1565c0; }
+.ctx-item:disabled { color: #bbb; cursor: default; }

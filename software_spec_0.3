@@ -1,0 +1,717 @@
+# Soaring Heights Kennel Management System
+## Software Specification | Version 3.0 | Agentic Development Ready
+
+**Date:** May 2026
+**Status:** FINAL DRAFT
+**Audience:** Development Team, AI Coding Agents, Operations Manager
+
+---
+
+## Table of Contents
+
+1. [Purpose and Scope](#1-purpose-and-scope)
+2. [Technology Stack](#2-technology-stack)
+3. [Project Directory Structure](#3-project-directory-structure)
+4. [Configuration Directory](#4-configuration-directory)
+5. [Domain Object Model](#5-domain-object-model)
+6. [Phase-Based Scheduling Model](#6-phase-based-scheduling-model)
+7. [Core Operational Workflows](#7-core-operational-workflows)
+8. [User Interface](#8-user-interface)
+9. [Reports](#9-reports)
+10. [Infrastructure and Deployment](#10-infrastructure-and-deployment)
+11. [Testing Strategy](#11-testing-strategy)
+12. [README Requirements](#12-readme-requirements)
+13. [Revision History](#13-revision-history)
+
+---
+
+## 1. Purpose and Scope
+
+This document is the complete, agentic-development-ready software specification for the Soaring Heights Kennel Management System (KMS). It is written to be fully actionable by both human developers and AI coding agents without requiring additional clarification. Every design decision, business rule, data model, workflow, configuration structure, infrastructure requirement, and testing expectation is captured here.
+
+The KMS is a web-based application deployed on a homestead LAN for internal staff use and owner self-service. It manages dog boarding reservations, scheduling, billing, PACFA compliance, and kennel operations.
+
+---
+
+## 2. Technology Stack
+
+| Layer | Technology / Decision |
+|---|---|
+| Frontend | React (Node.js); builds to static files; served by existing Nginx instance on host. |
+| Backend | Python with FastAPI; REST API; auto-generated Swagger/OpenAPI docs from docstrings. |
+| Database | SQLite; stored exclusively in backend container; no direct frontend access. |
+| API Communication | REST API between frontend and backend over internal Docker network. |
+| Deployment | Docker Compose; two containers (frontend, backend); homestead LAN only; no internet exposure. |
+| Web Server | Existing Nginx instance on R630 host; KMS added as new virtual host. Ports in 9100 range. |
+| Authentication | Local auth; username/password managed via command line on backend server (shadow file style). No UI for user management. |
+| API Documentation | FastAPI auto-generated Swagger from code docstrings. No separate spec document. |
+| PDF Generation | Backend generates PDFs for receipts and reports. Logo and business info from config. |
+| Email | SMTP; all credentials and settings config-driven. Auto-email is a config toggle. |
+| Logging | Docker logging driver (stdout/stderr). No separate log volume. |
+| Backups | Cron job inside backend container; daily at 1:15 AM; writes to mounted NAS volume; 30-day retention. |
+| Build/Deploy | `build.sh` script at project root; handles npm build, Docker Compose build and up, Nginx reload. |
+| Schema Migrations | Versioned SQL scripts in `/backend/migrations/`; applied automatically on startup; tracked in `schema_migrations` table. |
+| Testing | Unit tests (functions, failure modes, security boundaries) plus Integration tests (full operational workflows). |
+| Container Restart | `restart: always` on both containers. |
+
+---
+
+## 3. Project Directory Structure
+
+All project files live under the following root path on the R630 host:
+
+```
+/home/home/claud_code_folder/code/kennel_mgmt_system/
+```
+
+| Path | Purpose |
+|---|---|
+| `/frontend/` | React application source code. |
+| `/frontend/src/` | React components, pages, hooks, and utilities. |
+| `/frontend/public/` | Static assets. |
+| `/frontend/Dockerfile` | Frontend container build definition. |
+| `/backend/` | FastAPI application source code. |
+| `/backend/app/` | API routes, models, services, and business logic. |
+| `/backend/app/routes/` | FastAPI route handlers (one file per domain object). |
+| `/backend/app/models/` | SQLite data models and schema definitions. |
+| `/backend/app/services/` | Business logic layer (PACFA calc, phase engine, billing, PDF gen). |
+| `/backend/migrations/` | Versioned SQL migration scripts (`001_initial_schema.sql`, etc.). |
+| `/backend/seed/` | First-run seed data scripts. |
+| `/backend/Dockerfile` | Backend container build definition. |
+| `/config/` | All JSON configuration files (see Section 4). |
+| `/nginx/` | Nginx virtual host config file for KMS. |
+| `/scripts/` | `build.sh` and any utility scripts. |
+| `/docs/` | This specification document and supplementary documentation. |
+| `/docker-compose.yml` | Production Docker Compose definition. |
+| `/README.md` | Complete operations runbook for admins and AI agents. |
+
+---
+
+## 4. Configuration Directory
+
+All configuration files are located at `/config/` relative to the project root. All files use **JSON format**. Config files require root/sudo access to edit on the server. Changes take effect on next container startup.
+
+### 4.1 Config File Inventory
+
+| File | Purpose |
+|---|---|
+| `business.json` | Business identity: name, address, phone, email, website, logo_path. |
+| `kennels.json` | Kennel type definitions: type, sqft, features, count. System auto-provisions kennel records on startup. |
+| `pricing.json` | Nightly rates by size class (xs, s, m, l, xl). Activity type prices. Read-only from UI. |
+| `pacfa.json` | PACFA sqft requirements by size class and stay duration multipliers. Hard enforcement; no override. |
+| `smtp.json` | SMTP server, port, username, password, from_address, use_tls. |
+| `phases.json` | Phase window start times: morning_start, afternoon_start, evening_start, night_start. |
+| `system.json` | auto_email_receipt (bool), pickup_overdue_threshold_hours (int), portal_link_expiry_days (int), backup_retention_days (int), backup_path (NAS mount path). |
+| `ports.json` | frontend_port (9100), backend_port (9101). |
+
+### 4.2 kennels.json Structure
+
+Defines kennel types. The system auto-generates individual kennel records (K-01, K-02, etc.) sequentially across all types on startup. New kennels are provisioned automatically. Removed kennels trigger conflict detection before deactivation.
+
+```json
+{
+  "kennel_types": [
+    { "type": "Large", "sqft": 30, "features": "interior and exterior space", "count": 8 },
+    { "type": "Small", "sqft": 10, "features": "interior only", "count": 10 }
+  ]
+}
+```
+
+### 4.3 pacfa.json Structure
+
+Stores the PACFA-compliant sqft requirements per size class and stay duration multipliers. These values are **hard enforcement rules**. No staff override is permitted.
+
+**Formula:** `(dog_length_inches + 6)^2 / 144 = required_sqft`
+
+| Size Class | Est. Length (in) | Base Sqft (< 5 days) | 1.5x (5-30 days) | 2.0x (31-180 days) | 3.0x (181+ days) |
+|---|---|---|---|---|---|
+| XS (Toy) | 12 | 2.25 | 3.38 | 4.50 | 6.75 |
+| S (Terrier) | 18 | 4.00 | 6.00 | 8.00 | 12.00 |
+| M (Spaniel) | 24 | 6.25 | 9.38 | 12.50 | 18.75 |
+| L (Retriever) | 30 | 9.00 | 13.50 | 18.00 | 27.00 |
+| XL (Mastiff) | 36 | 12.25 | 18.38 | 24.50 | 36.75 |
+
+**181+ day exception:** If a qualifying activity (Nature Walk or Play Yard) is scheduled **and confirmed** for every day of the stay, the 2.0x multiplier applies instead of 3.0x. If any day is missing confirmation, the full 3.0x applies for the entire stay. The system proactively alerts staff each Morning phase if the qualifying activity has not yet been confirmed for a 181+ day stay dog.
+
+---
+
+## 5. Domain Object Model
+
+The system is built on eight domain objects. All objects use UUID primary keys. All objects support soft-delete (`archived` flag) rather than hard deletion.
+
+### 5.1 Owner
+
+| Field | Type | Description |
+|---|---|---|
+| owner_id | UUID | Primary key, system-generated. |
+| first_name | String (50) | Required. |
+| last_name | String (50) | Required. Primary search key. |
+| alternate_name | String (100) | Second owner in household. Optional. |
+| phone_number | String (20) | Required. |
+| sms_number | String (20) | Optional. |
+| email | String (100) | Required for portal link delivery. |
+| emergency_contact_name | String (100) | Optional. |
+| emergency_contact_phone | String (20) | Optional. |
+| vet_name | String (100) | Optional. |
+| vet_phone | String (20) | Optional. |
+| notes | Text | Free-text operational notes. |
+| created_at | DateTime | Record creation timestamp. |
+| updated_at | DateTime | Last modification timestamp. |
+| archived | Boolean | Soft-delete. Default false. |
+
+### 5.2 Dog
+
+| Field | Type | Description |
+|---|---|---|
+| dog_id | UUID | Primary key, system-generated. |
+| owner_id | UUID FK | Foreign key to Owner. Required. |
+| name | String (50) | Required. |
+| breed | String (100) | Required. |
+| description | Text | Physical description, markings, temperament. |
+| size_class | Enum | XS, S, M, L, XL. Required. Must not exceed kennel max_size_class. |
+| weight_lbs | Decimal | Optional. |
+| date_of_birth | Date | Optional. |
+| medical_status | Enum | Healthy, Injured, Quarantine, On Medication, Other. Required. |
+| medical_notes | Text | Free-text. Required if medical_status is not Healthy. |
+| vaccination_records | JSON Array | Array of VaccinationRecord sub-objects. |
+| photo_url | String | Optional path to uploaded dog photo. |
+| notes | Text | Free-text operational notes. |
+| open_incidents | Boolean (computed) | True if any unresolved Incident Reports exist. |
+| created_at | DateTime | Record creation timestamp. |
+| updated_at | DateTime | Last modification timestamp. |
+| archived | Boolean | Soft-delete. Default false. |
+
+#### 5.2.1 VaccinationRecord Sub-Object
+
+| Field | Type | Description |
+|---|---|---|
+| vaccine_name | String (100) | Required. (e.g., Rabies, Bordetella, DHPP) |
+| administered_date | Date | Required. |
+| expiration_date | Date | Optional. Warning if within 30 days or past. |
+| notes | String (255) | Optional. |
+
+### 5.3 Kennel
+
+| Field | Type | Description |
+|---|---|---|
+| kennel_id | UUID | Primary key, system-generated. |
+| kennel_number | String (20) | Auto-generated sequential identifier (K-01, K-02...). Unique. Natural sort order. |
+| kennel_type | String (50) | Type label from kennels.json (e.g., Large, Small). |
+| max_size_class | Enum | Derived from kennel type. XS, S, M, L, XL. |
+| sqft | Decimal | Square footage from kennels.json. Used in PACFA calculations. |
+| features | String (255) | Feature description from kennels.json. |
+| description | Text | Optional additional notes. |
+| active | Boolean | Whether available for assignment. Default true. |
+| provisioned_from_config | Boolean | True if auto-provisioned from kennels.json. |
+| created_at | DateTime | Record creation timestamp. |
+
+### 5.4 Reservation
+
+| Field | Type | Description |
+|---|---|---|
+| reservation_id | UUID | Primary key, system-generated. |
+| dog_id | UUID FK | Foreign key to Dog. |
+| kennel_id | UUID FK | Foreign key to Kennel. Assigned at reservation creation. Adjustable at check-in. |
+| dropoff_datetime | DateTime | Scheduled drop-off. Required. |
+| dropoff_phase | Enum (computed) | Morning, Afternoon, Evening. Derived from dropoff_datetime. |
+| pickup_datetime | DateTime | Scheduled pick-up. Required unless pickup_open_ended is true. |
+| pickup_phase | Enum (computed) | Morning, Afternoon, Evening. Derived from pickup_datetime. |
+| pickup_open_ended | Boolean | True if pickup overridden as open-ended. Default false. |
+| pickup_overdue_alerted | Boolean | True after 3-hour overdue alert has fired. |
+| checkin_datetime | DateTime | Actual check-in timestamp. Null until recorded. |
+| checkout_datetime | DateTime | Actual check-out timestamp. Null until recorded. |
+| checkin_staff | String | Username of staff who performed check-in. |
+| checkout_staff | String | Username of staff who performed check-out. |
+| medical_acknowledged | Boolean | True if staff acknowledged medical status at check-in. |
+| checkout_healthy | Boolean | True if staff marked dog healthy at checkout. |
+| checkout_notes | Text | Required narrative if checkout_healthy is false. |
+| stay_duration_days | Integer (computed) | Computed from dropoff to pickup. Drives PACFA multiplier. |
+| notes | Text | Reservation-specific notes. |
+| cancelled | Boolean | Soft-cancel. Default false. |
+| cancel_requested_by | Enum | Staff or Owner. |
+| cancel_confirmed_by | String | Staff username who confirmed cancellation. |
+| override_log | JSON Array | Array of OverrideEvent sub-objects. |
+| created_at | DateTime | Record creation timestamp. |
+| updated_at | DateTime | Last modification timestamp. |
+
+#### 5.4.1 OverrideEvent Sub-Object
+
+| Field | Type | Description |
+|---|---|---|
+| override_type | Enum | PhaseConflict, OpenEndedPickup, SizeWarning. |
+| override_datetime | DateTime | When the override was confirmed. |
+| override_by | String | Staff username who confirmed the override. |
+| conflict_description | String | Description of the conflict that was overridden. |
+
+### 5.5 Bill
+
+| Field | Type | Description |
+|---|---|---|
+| bill_id | UUID | Primary key, system-generated. |
+| reservation_id | UUID FK | Foreign key to Reservation. |
+| billing_cycle | Integer | 1 for standard stay; 2, 3... for 14-day extended stay cycles. |
+| cycle_start_date | Date | Start of this billing cycle. |
+| cycle_end_date | Date | End of this billing cycle. |
+| line_items | JSON Array | Array of BillLineItem sub-objects. |
+| subtotal | Decimal | Sum of all line item amounts before discounts. |
+| total_discounts | Decimal | Sum of all staff-applied discounts. |
+| total_due | Decimal | Final amount due. |
+| paid | Boolean | true = Paid; false = Unpaid. |
+| paid_datetime | DateTime | When marked paid. Null if unpaid. |
+| paid_confirmed_by | String | Staff username who marked paid. |
+| receipt_emailed | Boolean | True if receipt emailed to owner. |
+| receipt_pdf_path | String | Path to generated PDF receipt. |
+| created_at | DateTime | Record creation timestamp. |
+| updated_at | DateTime | Last modification timestamp. |
+
+#### 5.5.1 BillLineItem Sub-Object
+
+| Field | Type | Description |
+|---|---|---|
+| line_item_id | UUID | Sub-object identifier. |
+| type | Enum | KennelStay, Activity, AdditionalCharge. |
+| description | String (255) | Human-readable charge description. |
+| unit_price | Decimal | Price from config. May be adjusted by staff discount. |
+| quantity | Decimal | Number of nights, walks, treatments, etc. |
+| discount | Decimal | Staff-applied discount amount. |
+| discount_applied_by | String | Staff username who applied discount. |
+| amount | Decimal | (unit_price x quantity) minus discount. |
+| activity_id | UUID FK | Reference to Activity if type is Activity. Optional. |
+
+### 5.6 Activity
+
+| Field | Type | Description |
+|---|---|---|
+| activity_id | UUID | Primary key, system-generated. |
+| reservation_id | UUID FK | Foreign key to Reservation. |
+| incident_id | UUID FK | Foreign key to Incident Report if triggered by incident. Optional. |
+| activity_type | String (100) | Type from UI-managed activity types list. |
+| scheduled_date | Date | Date activity is scheduled. No specific time required at booking. |
+| performed_datetime | DateTime | Actual date and time performed. Null until completed. |
+| performed_by | String | Staff username who performed the activity. |
+| billable | Boolean | True only if performed_datetime and performed_by are both set. |
+| qualifies_for_pacfa_exception | Boolean | True if activity type is Nature Walk or Play Yard. |
+| notes | Text | Free-text notes. |
+| created_at | DateTime | Record creation timestamp. |
+
+### 5.7 Incident Report
+
+| Field | Type | Description |
+|---|---|---|
+| incident_id | UUID | Primary key, system-generated. |
+| dog_id | UUID FK | Foreign key to Dog. |
+| reservation_id | UUID FK | Foreign key to active Reservation. |
+| incident_type | Enum | Behavioral, Injury, Medical, EscapeAttempt, Other. |
+| description | Text | Narrative description. Required. |
+| occurred_datetime | DateTime | When the incident occurred. |
+| reported_by | String | Staff username who filed the report. |
+| visible_to_owner | Boolean | If true, owner can see in portal. Default false. |
+| owner_notified | Boolean | True if staff chose to notify owner. Default false. |
+| resolved | Boolean | Must be true before same dog can check in again. |
+| resolved_datetime | DateTime | When resolved. |
+| resolved_by | String | Staff username who resolved. |
+| created_at | DateTime | Record creation timestamp. |
+
+### 5.8 Issue Report
+
+| Field | Type | Description |
+|---|---|---|
+| issue_id | UUID | Primary key, system-generated. |
+| kennel_id | UUID FK | Foreign key to Kennel. |
+| issue_type | Enum | Maintenance, Safety, Cleanliness, Equipment, Other. |
+| description | Text | Narrative description. Required. |
+| reported_by | String | Staff username who filed. |
+| reported_datetime | DateTime | When filed. |
+| resolved | Boolean | Must be manually closed by staff. Default false. |
+| resolved_datetime | DateTime | When resolved. |
+| resolved_by | String | Staff username who resolved. |
+| created_at | DateTime | Record creation timestamp. |
+
+### 5.9 ActivityType (UI-Managed Reference Data)
+
+Activity types are managed by staff through the Activities screen. Prices are set in `pricing.json` (root access only). Staff can add and deactivate types in the UI but cannot change prices.
+
+| Field | Type | Description |
+|---|---|---|
+| activity_type_id | UUID | Primary key, system-generated. |
+| name | String (100) | Display name (e.g., Nature Walk, Playtime). |
+| qualifies_for_pacfa_exception | Boolean | True for Nature Walk and Play Yard only. |
+| active | Boolean | Staff can deactivate. Default true. |
+| created_at | DateTime | Record creation timestamp. |
+
+**Initial seeded activity types:** Nature Walk, Playtime, Medication Administration, Emergency Grooming, Play Yard.
+
+---
+
+## 6. Phase-Based Scheduling Model
+
+### 6.1 Daily Phase Windows
+
+| Phase | Window | Transitions Allowed | Notes |
+|---|---|---|---|
+| Morning | 6:00 AM -- 11:59 AM | Check-In, Check-Out | Highest volume window. |
+| Afternoon | 12:00 PM -- 5:59 PM | Check-In, Check-Out | Standard hours. |
+| Evening | 6:00 PM -- 11:59 PM | Check-In, Check-Out | Late arrivals and pickups. |
+| Night | 12:00 AM -- 5:59 AM | None | Occupancy only. No transitions permitted. |
+
+Phase start times are defined in `phases.json` and are configurable. Phase is always derived from clock time; it is never stored directly.
+
+### 6.2 Post-Checkout Hold Rule
+
+When checkout is recorded by staff, the kennel automatically enters Hold for the subsequent phase window. This is a **system-enforced rule and cannot be overridden**.
+
+| Checkout Phase | Hold Phase | Next Available Phase | Special Rule |
+|---|---|---|---|
+| Morning | Afternoon | Evening | Standard transition. |
+| Afternoon | Evening | Night (no transitions) | Kennel available Morning next day. |
+| Evening | Night | Morning (next day) | Hold persists through Night; available at Morning. |
+| Night | N/A | N/A | No checkouts permitted in Night phase. |
+
+### 6.3 Kennel Status Computation
+
+Kennel status for any given date and phase is computed server-side. Precedence order (highest to lowest):
+
+1. Active admin Hold record covers this date/phase: `status = Hold`
+2. Automatic post-checkout Hold covers this phase: `status = Hold`
+3. Reservation covers this date/phase AND `checkin_datetime` is set AND `checkout_datetime` is null: `status = Used`
+4. Reservation covers this date/phase AND `checkin_datetime` is null: `status = Assigned`
+5. No matching record: `status = Free`
+
+### 6.4 Multi-Dog Kennel Assignment
+
+Dogs from the same Owner may share a kennel if the combined PACFA sqft requirement does not exceed the kennel's total sqft. Each dog receives its own Reservation record. **PACFA calculation is a hard block with no staff override.**
+
+**Combined sqft formula:** Sum of each dog's `(dog_length_inches + 6)^2 / 144` with applicable stay duration multiplier must not exceed kennel sqft.
+
+### 6.5 Kennel Size Enforcement (Single Dog)
+
+A dog's `size_class` must not exceed the kennel's `max_size_class`. Size hierarchy: `XS < S < M < L < XL`. **Hard validation block with no override.**
+
+### 6.6 Conflict Detection and Override Rules
+
+| Conflict Type | Hard Block | Staff Override | Override Logged |
+|---|---|---|---|
+| PACFA sqft violation | Yes | No | N/A |
+| Size class mismatch | Yes | No | N/A |
+| Phase window overlap | Yes (with override) | Yes (checkbox) | Yes |
+| Open-ended pickup | Yes (with override) | Yes (checkbox) | Yes |
+| Outstanding unpaid bill at check-in | Yes (with override) | Yes (checkbox) | Yes |
+| Unresolved incident from prior stay | Yes | No | N/A |
+| Kennel deactivation with future reservations | Yes | No (resolve first) | N/A |
+
+All staff overrides require a checkbox confirmation. Override type, timestamp, staff username, and conflict description are recorded in `Reservation.override_log`.
+
+### 6.7 Pickup Overdue Alert
+
+When the actual pickup time exceeds the configured threshold (default: 3 hours) into the next phase window beyond the scheduled `pickup_phase`, the system automatically fires a **persistent banner alert** on the staff calendar grid. The alert:
+
+- Displays dog name, owner last name, kennel number, and time overdue
+- Remains visible until dismissed by staff
+- Stacks if multiple dogs are overdue simultaneously
+- Fires once per reservation (`pickup_overdue_alerted` flag)
+- Threshold is configurable in `system.json`
+
+### 6.8 14-Day Extended Stay Billing
+
+For stays longer than 14 days, payment is required either upfront in full or in 14-day billing cycles. At each 14-day interval the system generates a new Bill record and alerts staff. No hard block on kennel access; staff manages collection manually.
+
+### 6.9 Kennel Config Provisioning on Startup
+
+On every startup the backend reads `kennels.json` and reconciles kennel records:
+
+1. **New kennel types or increased counts:** New kennel records are auto-provisioned with the next sequential K-XX number.
+2. **Reduced counts or removed types:** System checks for future reservations on affected kennels.
+3. **If conflicts exist:** Startup alert lists affected kennels and reservations. Kennel deactivation is blocked until conflicts are resolved.
+4. **Conflict resolution:** System offers auto-reassignment to next available compatible kennel. If none available, staff must manually cancel or override.
+5. Auto-reassignment is logged with a system note on the Reservation record.
+
+---
+
+## 7. Core Operational Workflows
+
+### 7.1 Quick Add Reservation (Phone Inquiry)
+
+1. Staff clicks **Quick Add Schedule** button on the calendar grid header.
+2. Modal opens. Staff searches owner by last name.
+3. If owner found: select and skip to step 7.
+4. If new owner: click **Add New Owner**. Enter first name, last name, alternate name, phone, SMS, email, emergency contact name, emergency contact phone, vet name, vet phone. Save.
+5. System prompts: **Add a Dog for this owner?**
+6. Staff enters: name, breed, description, size class, weight, medical status, medical notes, vaccination records. Save.
+7. System prompts: **Add another dog?** Yes loops to step 6. No proceeds.
+8. Staff selects drop-off date and time. Phase derived and displayed.
+9. Staff selects pick-up date and time. Phase derived and displayed. Required; override available with checkbox + staff log.
+10. System displays available kennels matching or exceeding dog size class. Incompatible kennels shown as unavailable.
+11. For multi-dog same-owner: option to assign multiple dogs to one kennel. PACFA sqft validation runs. Hard block if violated.
+12. Staff selects kennel. System validates: size match, PACFA sqft, no phase overlap, no active hold.
+13. Staff optionally adds prescheduled activities (type, scheduled_date).
+14. System displays itemized cost estimate from `pricing.json`.
+15. Staff confirms. Reservation saved. Calendar grid updates.
+
+### 7.2 Check-In Flow
+
+1. Staff locates reservation cell on calendar grid by owner last name.
+2. Staff clicks cell; context menu appears.
+3. Staff selects **Check In**.
+4. System checks for outstanding unpaid bills from prior stays. If found: modal dialog lists balance. Staff must confirm override (logged) or resolve before proceeding.
+5. System checks for unresolved Incident Reports from prior stays. If found: **hard block**. Staff must resolve incidents before check-in can proceed.
+6. System displays dog `medical_status` and `medical_notes` prominently in modal.
+7. If `medical_status` is not Healthy: staff must check acknowledgment box ("I have reviewed and understand the special care requirements for this dog"). Staff username logged.
+8. Staff confirms check-in. `checkin_datetime` recorded. `checkin_staff` logged. Kennel transitions to **Used**.
+9. If owner has multiple dogs with same-day reservations: system returns to calendar grid for next dog.
+
+### 7.3 Check-Out Flow
+
+1. Staff locates Used cell on calendar grid.
+2. Staff clicks cell; selects **Check Out** from context menu.
+3. Checkout form modal opens.
+4. Staff selects one of: **(a)** checkbox "Dog is healthy at checkout", OR **(b)** fills required `checkout_notes` narrative. Both cannot be empty.
+5. Staff confirms. `checkout_datetime` recorded. `checkout_staff` logged.
+6. System automatically applies post-checkout Hold to kennel for next phase window.
+7. System generates PDF receipt: dog name, owner name, check-in datetime, check-out datetime, duration, all activity line items, discounts, total due, checkout health notes, business branding from `business.json`, logo from `logo_path`.
+8. Staff selects: **Print**, **Email to owner**, or **Save for later**. If `auto_email_receipt = true` in `system.json`, receipt is also emailed automatically.
+9. Staff marks bill as **Paid**. `paid_datetime` and `paid_confirmed_by` recorded.
+
+### 7.4 Cancellation Flow
+
+1. Owner submits cancellation request via portal OR staff initiates from reservation detail.
+2. Reservation flagged: `cancel_requested = true`; `cancel_requested_by` recorded.
+3. Staff reviews and confirms. `cancel_confirmed_by` recorded. Reservation soft-cancelled.
+4. Kennel phases released for reassignment.
+
+### 7.5 Incident Report Flow
+
+1. Staff clicks Used cell; selects **Add Incident Report** from context menu.
+2. Staff enters: `incident_type`, `description`, `occurred_datetime`.
+3. Staff selects: `visible_to_owner` (checkbox); `owner_notified` (checkbox).
+4. Incident saved. `open_incidents` flag on Dog set to true.
+5. Dog cannot be checked in again until incident is marked resolved.
+6. To resolve: staff opens Incident Report, enters resolution notes, marks resolved. `resolved_datetime` and `resolved_by` recorded.
+
+### 7.6 Issue Report Flow
+
+1. Staff navigates to Kennels screen; selects kennel; clicks **Add Issue Report**.
+2. Staff enters: `issue_type`, `description`, `reported_datetime`.
+3. Issue saved. Kennel status not automatically changed.
+4. Staff may manually place kennel on Hold from the Kennel detail screen.
+5. To resolve: staff opens Issue Report, marks resolved. `resolved_datetime` and `resolved_by` recorded.
+6. Staff may then lift Hold manually from Kennel detail screen.
+
+---
+
+## 8. User Interface
+
+### 8.1 Navigation Bar
+
+Persistent top navigation bar on all screens. Global search bar always visible.
+
+| Nav Item | Primary Purpose |
+|---|---|
+| Calendar | Default landing screen after login. 10-day grid. Primary operational view. |
+| Reservations | List, search, and manage all reservations. |
+| Dogs | Dog inventory; search; profiles; vaccination records. |
+| Owners | Owner directory; search; profiles; associated dogs. |
+| Kennels | Kennel list; status; issue reports; hold management. |
+| Reports | PACFA Compliance, Occupancy Rate, Revenue Summary, Upcoming Check-ins/Outs, Open Incidents and Issues. |
+| Activities | UI-managed activity types list; add and deactivate types. |
+
+### 8.2 Global Search
+
+Single search bar in the navigation bar. Searches across all record types simultaneously. Results are priority-ranked:
+
+1. **Active and pending stays** (currently checked in or upcoming reservations). Displayed first with kennel number and status badge.
+2. **Historical stays and billing records.** Displayed second in a collapsible section.
+
+All results are clickable and navigate directly to the relevant object detail (Reservation, Dog, Owner, Bill).
+
+### 8.3 Calendar Grid (Primary Screen)
+
+- **Layout:** Kennel rows x date columns. Each day subdivided into 4 phase columns (Morning, Afternoon, Evening, Night).
+- **Row header per kennel:** Kennel number (K-07), size class (Large), sqft (30 sqft). Natural sort order by kennel number.
+- **Default window:** 10 days, Sunday to Tuesday of the same week.
+- **Navigation:** Previous and Next shift by 10-day blocks. Date picker for jumping to any Sunday.
+- **Auto-refresh:** Hourly. Manual refresh button in grid header.
+- **Cell content:** Owner last name in Assigned and Used cells.
+- **Status colors:** Free = Green | Hold = Amber | Assigned = Blue | Used = Red/Orange
+- **Pending indicators:** Assigned cells with dropoff today = pending check-in indicator. Used cells with pickup today = pending check-out indicator.
+- **Tooltip on hover:** Dog name, owner last name, scheduled drop-off, scheduled pick-up, status.
+- **Quick Add Schedule button:** Always visible in grid header.
+- **Overdue pickup banner:** Persistent banner at top of grid. Stacks for multiple overdue dogs. Dismissible by staff.
+- **Data loading:** Day-by-day; each day column fetched independently for fast initial render.
+
+### 8.4 Cell Context Menu
+
+Clicking any Assigned or Used kennel cell opens a context menu:
+
+- View Reservation Details
+- Check In *(active only if status is Assigned)*
+- Check Out *(active only if status is Used)*
+- View Dog Profile
+- View Owner Profile
+- Add Incident Report
+
+Clicking a Free cell on a future date opens the New Reservation dialog with kennel and date pre-populated.
+
+### 8.5 Error and Conflict Display
+
+All errors and conflicts surface as **modal dialogs** requiring explicit staff acknowledgment. No auto-dismissing notifications. Severity communicated by modal color and icon:
+
+- **Red:** Hard block. Cannot proceed.
+- **Amber:** Warning requiring override confirmation. Checkbox required. Staff username logged.
+
+### 8.6 Owner Self-Service Portal
+
+Accessed via a **7-day one-time link** emailed by staff. No account creation or password required. A **Request New Link** button on the portal homepage sends a fresh 7-day link to the email on file.
+
+**Portal capabilities:**
+- View own dogs' profiles and vaccination records.
+- View upcoming and past reservations.
+- View Incident Reports marked `visible_to_owner = true`.
+- Availability calendar: Free vs. Busy by size class and date. No other owner or dog data visible.
+- Modify reservations (dates, times, activities) before check-in. All validation enforced. **No override capability.**
+- Request cancellation (staff confirmation required to complete).
+- Self-book new reservations. All validation enforced. **No override capability.**
+- No document uploads. All record entry is staff-managed.
+
+---
+
+## 9. Reports
+
+All reports are accessible to all staff from the Reports screen. All reports export as **PDF** with business branding from `business.json` and `logo_path`.
+
+| Report | Scope | Key Content |
+|---|---|---|
+| PACFA Compliance | Active stays only (point-in-time) | Dog, size class, kennel, kennel sqft, required sqft, duration multiplier, multi-dog combined sqft, Pass/Fail per kennel, 181+ day activity gaps. |
+| Occupancy Rate | User-defined date range | Kennel utilization percentage by day, size class breakdown, peak occupancy dates. |
+| Revenue Summary | User-defined date range | Total revenue, revenue by size class, activity revenue, discount totals, unpaid balance summary. |
+| Upcoming Check-ins and Check-outs | Today and next 7 days | Dog name, owner name, kennel, scheduled datetime, phase, status. |
+| Open Incidents and Issues | All unresolved records | Incident type, dog, reservation, reported date, reported by. Issue type, kennel, reported date, reported by. |
+
+---
+
+## 10. Infrastructure and Deployment
+
+### 10.1 Docker Compose
+
+Two containers defined in `docker-compose.yml` at project root. Both use `restart: always`.
+
+| Container | Contents | Network Exposure |
+|---|---|---|
+| frontend | React static build; served by internal Node HTTP server. | Port 9100 exposed to host; proxied by Nginx. |
+| backend | FastAPI application; SQLite database; backup cron job. | Internal Docker network only. Not directly accessible from host or LAN. API proxied through Nginx. |
+
+### 10.2 Nginx Configuration
+
+KMS is added to the existing Nginx instance on the R630 host as a new virtual host. A complete drop-in config block is provided at `/nginx/kennel.conf`.
+
+| Directive | Value |
+|---|---|
+| Frontend port | 9100 |
+| Backend API port | 9101 (internal; proxied by Nginx) |
+| server_name | `kennel.soaringheights.local [R630_IP_ADDRESS]` |
+| Frontend location | Proxy to frontend container port 9100 |
+| API location (`/api/`) | Proxy pass to backend container port 9101 |
+| Internal DNS requirement | `kennel.soaringheights.local` must resolve to R630 IP in local DNS |
+
+### 10.3 NAS Backup
+
+The NAS volume is mounted into the backend container. The backup cron job runs at **1:15 AM daily** inside the backend container.
+
+- **File naming:** `kennel_db_YYYY-MM-DD.sqlite`
+- **Retention:** 30 days. Files older than 30 days are pruned automatically.
+- **Backup path:** Defined in `system.json`.
+
+### 10.4 Schema Migrations
+
+Migration scripts live in `/backend/migrations/` and are numbered sequentially (e.g., `001_initial_schema.sql`, `002_add_billing.sql`). On startup, the backend checks the `schema_migrations` table and applies any unapplied scripts in order. Migration failures halt startup and log the error.
+
+### 10.5 First-Run Seed Data
+
+On first install against an empty database, the backend seeds:
+
+- One placeholder **Owner**
+- One placeholder **Dog** linked to that Owner
+- One **Kennel** (K-01) provisioned from `kennels.json`
+
+Seed records are flagged `is_seed = true`. All additional kennels are provisioned from `kennels.json` on subsequent startups.
+
+### 10.6 build.sh
+
+Located at project root. Executes in sequence:
+
+1. `npm install` and `npm run build` in `/frontend/`
+2. `docker compose build`
+3. `docker compose up -d`
+4. `nginx -s reload`
+
+A single command for standing up or redeploying the full system.
+
+---
+
+## 11. Testing Strategy
+
+Three test layers are required. All tests must pass before any build is considered production-ready.
+
+### 11.1 Unit Tests
+
+- Phase derivation: correct phase for all clock times including exact boundary minutes (06:00:00, 11:59:59, 12:00:00, etc.).
+- Post-checkout hold: correct hold phase and next-available phase for all four checkout phases including Evening-to-Night edge case.
+- PACFA sqft calculation: all size classes, all duration multipliers, multi-dog combined sqft, 181+ day exception with and without daily activity confirmation.
+- Size class enforcement: all valid and invalid combinations.
+- Billing math: line item totals, discount application, total_due, 14-day cycle generation.
+- Pickup overdue alert: fires at exactly the configured threshold; does not fire before.
+- Medical acknowledgment: check-in blocked without acknowledgment when status is not Healthy.
+- Kennel config provisioning: new kennels provisioned; conflict detection on deactivation; auto-reassignment logic.
+- **Failure mode tests:** Out-of-bounds inputs (negative prices, invalid dates, oversized strings, null required fields, invalid enum values).
+- **Security tests:** SQL injection prevention on all string inputs; authorization bypass attempts; direct database access attempts from frontend; config file access without root.
+
+### 11.2 Integration Tests
+
+Integration tests follow complete operational workflows end-to-end from API call through database write and response.
+
+- Full Quick Add Reservation flow: new owner, new dog, reservation creation, size validation, phase conflict detection.
+- Check-in flow: medical acknowledgment; blocked by outstanding bill; blocked by open incidents.
+- Check-out flow: healthy flag path; required narrative path; automatic hold applied; PDF receipt generated; bill marked paid.
+- Cancellation flow: owner request; staff confirmation; kennel phases released.
+- Multi-dog same-kennel assignment: PACFA validation pass and fail scenarios.
+- Billing flow: line items generated; discount applied; 14-day cycle billing alert.
+- Incident report: creation; block same-dog check-in; resolve; check-in unblocked.
+- Issue report: creation; manual Hold; manual close; Hold lifted.
+- Owner portal: one-time link access; availability view; reservation modification; cancellation request; self-booking.
+- Override flows: phase conflict override logged; open-ended pickup override logged.
+- PACFA 181+ day alert: fires at Morning phase when daily activity not confirmed.
+- Kennel config provisioning: startup auto-provision; deactivation conflict detection; auto-reassignment.
+
+---
+
+## 12. README Requirements
+
+The `README.md` at the project root serves two audiences equally: **human system administrators** and **AI coding agents**. It must be unambiguous, complete, and structured so an agent can navigate the codebase cold without additional context.
+
+**Required README sections:**
+
+1. Project overview and purpose (2-3 sentences).
+2. Full project directory tree from `/home/home/claud_code_folder/code/kennel_mgmt_system/` with one-line description per directory and file.
+3. Config directory inventory: every config file, its purpose, and its key structure with example values.
+4. First-time installation steps: prerequisites, `build.sh` usage, first-run seed verification.
+5. Nginx setup: how to add `/nginx/kennel.conf` to existing Nginx instance; reload command.
+6. Staff account management: command-line steps to add, change password, and deactivate staff accounts.
+7. Database migration: how migrations are applied; how to add a new migration script.
+8. NAS backup: mount point setup; verifying backup cron; manual backup command.
+9. Key business rules summary: phase windows, PACFA enforcement, post-checkout hold rule, 14-day billing cycle, multi-dog sqft calculation.
+10. API base URL and conventions: base path, authentication header format, error response structure.
+11. Common troubleshooting: container not starting; Nginx proxy errors; migration failures; backup not running.
+
+---
+
+## 13. Revision History
+
+| Version | Date | Author | Summary |
+|---|---|---|---|
+| 1.0 | May 2026 | J. Adkins | Initial specification draft. |
+| 2.0 | May 2026 | J. Adkins / Claude | Phase-based scheduling, billing, activities, incident/issue reports, owner portal, check-in/out workflows, testing strategy, tech stack. |
+| 3.0 | May 2026 | J. Adkins / Claude | Agentic development ready. Added: config directory structure, project directory layout, PACFA full compliance model, multi-dog sqft enforcement, kennel JSON provisioning, Docker/Nginx/NAS infrastructure, build.sh, README requirements, extended stay billing, global search, full reports inventory, activity type UI management, owner portal one-time link, all remaining design decisions resolved. |
+
+---
+
+*Soaring Heights Kennel Management System | CONFIDENTIAL | v3.0 | May 2026*
+

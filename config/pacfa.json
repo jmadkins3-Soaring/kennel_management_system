@@ -1,0 +1,18 @@
+{
+  "_comment": "Required sqft per size class. Formula: (dog_length_inches + 6)^2 / 144. Multipliers applied by stay duration.",
+  "size_classes": {
+    "XS": { "est_length_in": 12, "base_sqft": 2.25 },
+    "S":  { "est_length_in": 18, "base_sqft": 4.00 },
+    "M":  { "est_length_in": 24, "base_sqft": 6.25 },
+    "L":  { "est_length_in": 30, "base_sqft": 9.00 },
+    "XL": { "est_length_in": 36, "base_sqft": 12.25 }
+  },
+  "stay_multipliers": {
+    "lt_5_days":    1.0,
+    "5_to_30_days": 1.5,
+    "31_to_180_days": 2.0,
+    "181_plus_days":  3.0,
+    "181_plus_days_with_daily_qualifying_activity": 2.0
+  },
+  "qualifying_activity_types": ["Nature Walk", "Play Yard"]
+}

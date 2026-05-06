@@ -1,0 +1,33 @@
+.overdue-banner {
+  background: #b71c1c;
+  color: #fff;
+  padding: 0;
+}
+
+.overdue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.15);
+  font-size: 13px;
+  gap: 12px;
+}
+.overdue-item:last-child { border-bottom: none; }
+
+.overdue-icon { font-size: 16px; }
+.overdue-text { flex: 1; }
+.overdue-text strong { font-weight: 700; }
+.overdue-hours { font-size: 11px; opacity: .85; }
+
+.overdue-dismiss {
+  background: rgba(255,255,255,.2);
+  border: 1px solid rgba(255,255,255,.4);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.overdue-dismiss:hover { background: rgba(255,255,255,.3); }

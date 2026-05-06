@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "tests/*",
+    "seed/*",
+    "manage.py",
+    "app/services/email.py",
+    "app/services/pdf.py",
+]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true

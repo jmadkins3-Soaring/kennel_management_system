@@ -1,0 +1,183 @@
+.cal-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.cal-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  min-width: max-content;
+}
+
+/* sticky kennel header column */
+.cal-table th.kennel-th,
+.cal-table td.kennel-td {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+  border-right: 2px solid var(--border);
+  min-width: 120px;
+  max-width: 140px;
+}
+.cal-table th.kennel-th { z-index: 3; background: #fafafa; }
+
+/* day group header */
+.cal-table .day-th {
+  text-align: center;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-sub);
+  background: #fafafa;
+  border-bottom: 1px solid var(--border);
+  border-right: 2px solid var(--border);
+}
+.cal-table .day-th.today { background: #e3f2fd; color: #0d47a1; }
+
+/* phase sub-header */
+.cal-table .phase-th {
+  text-align: center;
+  padding: 3px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-sub);
+  background: #fafafa;
+  width: 52px;
+  border-right: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.cal-table .phase-last { border-right: 2px solid var(--border); }
+
+/* kennel row header */
+.kennel-td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.kennel-num { font-weight: 700; font-size: 13px; }
+.kennel-meta { font-size: 10px; color: var(--text-sub); }
+
+/* cells */
+.cal-cell {
+  width: 52px;
+  height: 38px;
+  border-right: 1px solid rgba(0,0,0,.06);
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: filter .1s;
+  vertical-align: middle;
+  text-align: center;
+}
+.cal-cell:hover { filter: brightness(.93); }
+
+.cal-cell.phase-last { border-right: 2px solid rgba(0,0,0,.12); }
+
+.cal-cell.free     { background: var(--color-free); }
+.cal-cell.hold     { background: var(--color-hold); }
+.cal-cell.assigned { background: var(--color-assigned); }
+.cal-cell.used     { background: var(--color-used); }
+
+.cell-label {
+  font-size: 10px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 3px;
+  max-width: 50px;
+  display: block;
+}
+.free .cell-label     { color: #2e7d32; }
+.hold .cell-label     { color: #e65100; }
+.assigned .cell-label { color: #0d47a1; }
+.used .cell-label     { color: #b71c1c; }
+
+.cell-pending {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 8px;
+  opacity: .7;
+}
+
+/* tooltip */
+.cal-cell:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,.85);
+  color: #fff;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: pre-line;
+  pointer-events: none;
+  z-index: 100;
+  min-width: 130px;
+}
+
+.cal-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.cal-nav-btn {
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cal-nav-btn:hover { background: #f0f0f0; }
+.cal-date-label { font-weight: 600; font-size: 13px; min-width: 160px; text-align: center; }
+.cal-date-picker { padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
+.cal-refresh-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cal-refresh-btn:hover { background: #f0f0f0; }
+
+.cal-legend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 11px;
+}
+.legend-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.cal-loading {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-sub);
+}
+
+.pacfa-alert-bar {
+  background: #fff3e0;
+  border-bottom: 2px solid #ff9800;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #e65100;
+  font-weight: 600;
+}

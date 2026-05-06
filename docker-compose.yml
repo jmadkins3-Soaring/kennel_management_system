@@ -1,0 +1,33 @@
+services:
+  backend:
+    build: ./backend
+    restart: always
+    environment:
+      DB_PATH: /data/kennel.db
+      CONFIG_DIR: /config
+      SECRET_KEY: ${KMS_SECRET_KEY:-CHANGE_ME_IN_PRODUCTION}
+      RECEIPTS_DIR: /tmp/receipts
+      REPORTS_DIR: /tmp/reports
+    volumes:
+      - ./config:/config:ro
+      - kennel_data:/data
+      - ${NAS_BACKUP_PATH:-/tmp/kennel_backups}:/mnt/nas
+    ports:
+      - "127.0.0.1:9101:9101"
+    networks:
+      - kms_net
+
+  frontend:
+    build: ./frontend
+    restart: always
+    ports:
+      - "127.0.0.1:9100:9100"
+    networks:
+      - kms_net
+
+volumes:
+  kennel_data:
+
+networks:
+  kms_net:
+    driver: bridge

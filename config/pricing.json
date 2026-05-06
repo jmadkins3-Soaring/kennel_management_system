@@ -1,0 +1,16 @@
+{
+  "nightly_rates": {
+    "XS": 25.00,
+    "S":  30.00,
+    "M":  35.00,
+    "L":  40.00,
+    "XL": 45.00
+  },
+  "activity_prices": {
+    "Nature Walk":               15.00,
+    "Playtime":                  10.00,
+    "Medication Administration": 5.00,
+    "Emergency Grooming":        30.00,
+    "Play Yard":                 12.00
+  }
+}

@@ -1,0 +1,165 @@
+:root {
+  --color-free:        #e8f5e9;
+  --color-free-border: #4caf50;
+  --color-hold:        #fff8e1;
+  --color-hold-border: #ff9800;
+  --color-assigned:    #e3f2fd;
+  --color-assigned-border: #2196f3;
+  --color-used:        #fbe9e7;
+  --color-used-border: #f44336;
+
+  --bg:       #f0f2f5;
+  --bg-card:  #ffffff;
+  --border:   #e0e0e0;
+  --text:     #212121;
+  --text-sub: #757575;
+
+  --nav-bg:   #1565c0;
+  --nav-text: #ffffff;
+  --nav-h:    52px;
+
+  --shadow: 0 1px 3px rgba(0,0,0,0.12);
+  --radius: 4px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-weight: 500;
+  transition: opacity .15s;
+}
+.btn:disabled { opacity: .5; cursor: default; }
+.btn:hover:not(:disabled) { opacity: .88; }
+
+.btn-primary { background: #1565c0; color: #fff; border-color: #1565c0; }
+.btn-secondary { background: #fff; color: var(--text); border-color: var(--border); }
+.btn-danger { background: #c62828; color: #fff; border-color: #c62828; }
+.btn-warning { background: #e65100; color: #fff; border-color: #e65100; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.form-field label { font-size: 12px; font-weight: 600; color: var(--text-sub); text-transform: uppercase; letter-spacing: .04em; }
+.form-field input,
+.form-field select,
+.form-field textarea {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--text);
+  width: 100%;
+}
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus { outline: 2px solid #1565c0; outline-offset: -1px; }
+.form-field textarea { resize: vertical; min-height: 70px; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.badge-free     { background: var(--color-free);     color: #2e7d32; border: 1px solid var(--color-free-border); }
+.badge-hold     { background: var(--color-hold);     color: #e65100; border: 1px solid var(--color-hold-border); }
+.badge-assigned { background: var(--color-assigned); color: #0d47a1; border: 1px solid var(--color-assigned-border); }
+.badge-used     { background: var(--color-used);     color: #b71c1c; border: 1px solid var(--color-used-border); }
+
+.page-content {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.page-header h1 { font-size: 20px; font-weight: 600; }
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.data-table th,
+table.data-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.data-table th {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-sub);
+  background: #fafafa;
+}
+table.data-table tbody tr:hover { background: #f5f9ff; cursor: pointer; }
+table.data-table tbody tr:last-child td { border-bottom: none; }
+
+.empty-state {
+  padding: 48px;
+  text-align: center;
+  color: var(--text-sub);
+}
+
+.spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: #1565c0;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  margin: 48px auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error-text { color: #c62828; font-size: 12px; margin-top: 4px; }
+
+.divider { height: 1px; background: var(--border); margin: 16px 0; }

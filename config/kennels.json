@@ -1,0 +1,6 @@
+{
+  "kennel_types": [
+    { "type": "Large", "sqft": 30, "max_size_class": "XL", "features": "interior and exterior space", "count": 8 },
+    { "type": "Small", "sqft": 10, "max_size_class": "M",  "features": "interior only",              "count": 10 }
+  ]
+}

@@ -1,0 +1,20 @@
+# Python
+backend/.venv/
+backend/venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+
+# DB / data
+*.db
+*.sqlite
+
+# OS
+.DS_Store
