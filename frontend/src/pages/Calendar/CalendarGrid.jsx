@@ -11,10 +11,29 @@ function statusClass(status) {
   return (status || 'Free').toLowerCase()
 }
 
-function cellTip(phase, status, ownerLast, reservationId) {
-  const lines = [`Phase: ${phase}`, `Status: ${status || 'Free'}`]
-  if (ownerLast) lines.push(`Owner: ${ownerLast}`)
-  return lines.join('\n')
+function computeSpans(k) {
+  const flat = []
+  k.days.forEach(day => {
+    PHASES.forEach((ph, pi) => {
+      flat.push({ date: day.date, ph, pi, cell: day.phases[ph] || {}, isLastPhase: pi === 3 })
+    })
+  })
+  const spans = []
+  let i = 0
+  while (i < flat.length) {
+    const item = flat[i]
+    const resId = item.cell.reservation_id
+    if (resId) {
+      let j = i + 1
+      while (j < flat.length && flat[j].cell.reservation_id === resId) j++
+      spans.push({ ...item, colSpan: j - i, phaseLastBorder: flat[j - 1].isLastPhase })
+      i = j
+    } else {
+      spans.push({ ...item, colSpan: 1, phaseLastBorder: item.isLastPhase })
+      i++
+    }
+  }
+  return spans
 }
 
 export default function CalendarGrid({ onAction }) {
@@ -22,7 +41,7 @@ export default function CalendarGrid({ onAction }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [menu, setMenu] = useState(null) // { x, y, cell }
+  const [menu, setMenu] = useState(null)
   const refreshTimer = useRef(null)
 
   const load = useCallback(async (date) => {
@@ -64,8 +83,8 @@ export default function CalendarGrid({ onAction }) {
     onAction?.(action, cell)
   }
 
-  // Build date range
   const dates = Array.from({ length: 10 }, (_, i) => addDays(startDate, i))
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -135,49 +154,39 @@ export default function CalendarGrid({ onAction }) {
                 <tr key={k.kennel_id}>
                   <td className="kennel-td">
                     <div className="kennel-num">{k.kennel_number}</div>
-                    <div className="kennel-meta">
-                      {k.days?.[0] && (() => {
-                        // pull size/sqft from first cell's kennel data if available
-                        return null
-                      })()}
-                    </div>
                   </td>
-                  {k.days.map(day =>
-                    PHASES.map((ph, pi) => {
-                      const cell = day.phases[ph] || {}
-                      const status = cell.status || 'Free'
-                      const cls = statusClass(status)
-                      const todayDate = format(parseISO(day.date), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
-                      const isPendingCI = status === 'Assigned' && todayDate
-                      const isPendingCO = status === 'Used' && todayDate
-                      return (
-                        <td
-                          key={`${day.date}-${ph}`}
-                          className={`cal-cell ${cls}${pi === 3 ? ' phase-last' : ''}`}
-                          data-tip={cellTip(ph, status, cell.owner_last_name, cell.reservation_id)}
-                          onClick={e => {
-                            const cellInfo = {
-                              kennelId: k.kennel_id,
-                              kennelNumber: k.kennel_number,
-                              date: day.date,
-                              phase: ph,
-                              status,
-                              reservationId: cell.reservation_id || null,
-                              ownerLastName: cell.owner_last_name || null,
-                            }
-                            openMenu(e, cellInfo)
-                          }}
-                        >
-                          {cell.owner_last_name && (
-                            <span className="cell-label">{cell.owner_last_name}</span>
-                          )}
-                          {(isPendingCI || isPendingCO) && (
-                            <span className="cell-pending">{isPendingCI ? '▼' : '▲'}</span>
-                          )}
-                        </td>
-                      )
-                    })
-                  )}
+                  {computeSpans(k).map(span => {
+                    const status = span.cell.status || 'Free'
+                    const cls = statusClass(status)
+                    const isToday = span.date === todayStr
+                    const isPendingCI = status === 'Assigned' && isToday
+                    const isPendingCO = status === 'Used' && isToday
+                    const merged = span.colSpan > 1
+                    return (
+                      <td
+                        key={`${span.date}-${span.ph}`}
+                        colSpan={span.colSpan}
+                        className={`cal-cell ${cls}${span.phaseLastBorder ? ' phase-last' : ''}${merged ? ' merged' : ''}`}
+                        title={`${span.ph} · ${status}${span.cell.owner_last_name ? ` · ${span.cell.owner_last_name}` : ''}`}
+                        onClick={e => openMenu(e, {
+                          kennelId: k.kennel_id,
+                          kennelNumber: k.kennel_number,
+                          date: span.date,
+                          phase: span.ph,
+                          status,
+                          reservationId: span.cell.reservation_id || null,
+                          ownerLastName: span.cell.owner_last_name || null,
+                        })}
+                      >
+                        {span.cell.owner_last_name && (
+                          <span className="cell-label">{span.cell.owner_last_name}</span>
+                        )}
+                        {(isPendingCI || isPendingCO) && (
+                          <span className="cell-pending">{isPendingCI ? '▼' : '▲'}</span>
+                        )}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))}
             </tbody>

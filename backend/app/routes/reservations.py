@@ -186,8 +186,11 @@ async def create_reservation(
         )
     ]
 
-    if overlapping_res and stay_days > 0:
-        # Fetch actual dogs for co-occupants and build combined PACFA check (hard block)
+    validated_co_occupants: set = set()
+
+    if overlapping_res:
+        # Use minimum 1 day for PACFA check on open-ended stays
+        check_days = stay_days if stay_days > 0 else 1
         co_dog_size_classes: List[dict] = []
         for existing in overlapping_res:
             co_dog = await session.get(Dog, existing.dog_id)
@@ -195,10 +198,9 @@ async def create_reservation(
                 co_dog_size_classes.append({"size_class": co_dog.size_class.value})
 
         if co_dog_size_classes:
-            # Add the new dog to the list for combined check
             all_dogs = co_dog_size_classes + [{"size_class": dog.size_class.value}]
             passes_multi, combined_req, k_sqft = pacfa_svc.validate_pacfa_multi(
-                all_dogs, stay_days, kennel.sqft
+                all_dogs, check_days, kennel.sqft
             )
             if not passes_multi:
                 raise HTTPException(
@@ -208,18 +210,17 @@ async def create_reservation(
                         f"exceeds kennel {k_sqft:.2f} sqft"
                     ),
                 )
+            # PACFA passed — these are valid co-occupants, not scheduling conflicts
+            validated_co_occupants = {r.reservation_id for r in overlapping_res}
 
     override_log: List[dict] = []
 
     # 6. Check kennel availability (phase conflict).
-    # Co-housing (same exact dropoff/pickup datetimes) is intentional — no conflict.
-    # Phase conflict only fires when the new reservation dates DIFFER from an existing one.
+    # Reservations that passed multi-dog PACFA are valid co-occupants — not conflicts.
+    # Phase conflict only applies to overlapping sequential stays that didn't pass co-housing validation.
     conflicting_res = [
         r for r in overlapping_res
-        if not (
-            r.dropoff_datetime == body.dropoff_datetime
-            and r.pickup_datetime == body.pickup_datetime
-        )
+        if r.reservation_id not in validated_co_occupants
     ]
     if conflicting_res:
         if not body.override_phase_conflict:

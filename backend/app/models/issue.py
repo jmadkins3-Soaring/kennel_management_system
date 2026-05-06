@@ -5,6 +5,8 @@ from typing import Optional
 from enum import Enum
 import uuid
 
+from pydantic import ConfigDict
+from sqlalchemy import Column, String as SAString
 from sqlmodel import Field, SQLModel
 
 
@@ -17,6 +19,8 @@ class IssueType(str, Enum):
 
 
 class IssueBase(SQLModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     kennel_id: str = Field(foreign_key="kennels.kennel_id", index=True)
     issue_type: IssueType
     description: str
@@ -27,6 +31,7 @@ class Issue(IssueBase, table=True):
     __tablename__ = "issues"
 
     issue_id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    issue_type: str = Field(sa_column=Column("issue_type", SAString(50)))
     reported_by: str = Field(max_length=50)
     resolved: bool = Field(default=False)
     resolved_datetime: Optional[datetime] = None

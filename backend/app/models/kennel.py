@@ -5,6 +5,7 @@ from typing import Optional
 from enum import Enum
 import uuid
 
+from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel
 
 
@@ -24,6 +25,8 @@ class KennelStatus(str, Enum):
 
 
 class KennelBase(SQLModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     kennel_number: str = Field(max_length=20, unique=True, index=True)
     kennel_type: str = Field(max_length=50)
     max_size_class: SizeClass

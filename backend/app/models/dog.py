@@ -5,8 +5,9 @@ from typing import Optional, List, Any
 from enum import Enum
 import uuid
 
+from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Column, JSON
+from sqlalchemy import Column, JSON, String as SAString
 
 
 class SizeClass(str, Enum):
@@ -34,6 +35,8 @@ class VaccinationRecord(SQLModel):
 
 
 class DogBase(SQLModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     owner_id: str = Field(foreign_key="owners.owner_id", index=True)
     name: str = Field(max_length=50)
     breed: str = Field(max_length=100)
@@ -41,7 +44,7 @@ class DogBase(SQLModel):
     size_class: SizeClass
     weight_lbs: Optional[float] = None
     date_of_birth: Optional[date] = None
-    medical_status: MedicalStatus = MedicalStatus.HEALTHY
+    medical_status: MedicalStatus = Field(default=MedicalStatus.HEALTHY)
     medical_notes: Optional[str] = None
     photo_url: Optional[str] = None
     notes: Optional[str] = None
@@ -51,6 +54,7 @@ class Dog(DogBase, table=True):
     __tablename__ = "dogs"
 
     dog_id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    medical_status: str = Field(default="Healthy", sa_column=Column("medical_status", SAString(50), default="Healthy"))
     vaccination_records: Optional[List[Any]] = Field(
         default=None, sa_column=Column(JSON)
     )

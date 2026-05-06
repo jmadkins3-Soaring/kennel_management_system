@@ -3,6 +3,7 @@ import Layout from '../../components/Layout'
 import Modal from '../../components/Modal'
 import { listDogs, getDog, updateDog, createDog, archiveDog, addVaccination } from '../../api/dogs'
 import { listOwners } from '../../api/owners'
+import { DOG_BREEDS } from '../../utils/breeds'
 
 const SIZES = ['XS', 'S', 'M', 'L', 'XL']
 
@@ -201,7 +202,11 @@ function DogForm({ form, setF, sizes }) {
   return <>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
       <div className="form-field"><label>Name*</label><input value={form.name || ''} onChange={e => setF('name', e.target.value)} /></div>
-      <div className="form-field"><label>Breed</label><input value={form.breed || ''} onChange={e => setF('breed', e.target.value)} /></div>
+      <div className="form-field">
+        <label>Breed*</label>
+        <input list="dog-breeds-list" value={form.breed || ''} onChange={e => setF('breed', e.target.value)} placeholder="Search breeds…" />
+        <datalist id="dog-breeds-list">{DOG_BREEDS.map(b => <option key={b} value={b} />)}</datalist>
+      </div>
       <div className="form-field">
         <label>Size*</label>
         <select value={form.size_class || 'M'} onChange={e => setF('size_class', e.target.value)}>

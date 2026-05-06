@@ -81,6 +81,11 @@
 .cal-cell.assigned { background: var(--color-assigned); }
 .cal-cell.used     { background: var(--color-used); }
 
+.cal-cell.merged {
+  text-align: left;
+  padding-left: 6px;
+}
+
 .cell-label {
   font-size: 10px;
   font-weight: 600;
@@ -90,6 +95,10 @@
   padding: 0 3px;
   max-width: 50px;
   display: block;
+}
+
+.merged .cell-label {
+  max-width: none;
 }
 .free .cell-label     { color: #2e7d32; }
 .hold .cell-label     { color: #e65100; }

@@ -3,6 +3,7 @@ import Modal from '../../components/Modal'
 import { listOwners, createOwner, getOwnerDogs } from '../../api/owners'
 import { createDog } from '../../api/dogs'
 import { listKennels } from '../../api/kennels'
+import { DOG_BREEDS } from '../../utils/breeds'
 import { createReservation } from '../../api/reservations'
 import { listActivityTypes } from '../../api/activityTypes'
 import { format } from 'date-fns'
@@ -28,7 +29,7 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
   const [ownerResults, setOwnerResults] = useState([])
   const [owner, setOwner] = useState(null)
   const [newOwner, setNewOwner] = useState(false)
-  const [ownerForm, setOwnerForm] = useState({ first_name: '', last_name: '', phone: '', email: '', emergency_contact: '', notes: '' })
+  const [ownerForm, setOwnerForm] = useState({ first_name: '', last_name: '', phone_number: '', email: '', emergency_contact_name: '', notes: '' })
 
   // Step 2: Dog select
   const [dogs, setDogs] = useState([])
@@ -73,12 +74,16 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
     getOwnerDogs(owner.owner_id).then(setDogs).catch(() => setDogs([]))
   }, [owner])
 
-  // Load kennels at step 4
+  // Load kennels at step 4 — include status at dropoff date/phase
   useEffect(() => {
     if (step !== 4) return
-    const sizeClass = dog?.size_class || dogForm.size_class
-    listKennels({ size_class: sizeClass }).then(setKennels).catch(() => setKennels([]))
-  }, [step, dog, dogForm.size_class])
+    const params = {}
+    if (dropoffDate) {
+      params.for_date = dropoffDate
+      params.for_phase = phaseFromTime(dropoffTime)
+    }
+    listKennels(params).then(setKennels).catch(() => setKennels([]))
+  }, [step, dropoffDate, dropoffTime])
 
   // Load activity types at step 5
   useEffect(() => {
@@ -201,7 +206,7 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
                     onMouseLeave={e => e.currentTarget.style.background = ''}
                   >
                     <strong>{o.last_name}, {o.first_name}</strong>
-                    <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{o.phone}</span>
+                    <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{o.phone_number}</span>
                   </div>
                 ))}
               </div>
@@ -221,10 +226,10 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-field"><label>First Name*</label><input value={ownerForm.first_name} onChange={e => setO('first_name', e.target.value)} /></div>
                 <div className="form-field"><label>Last Name*</label><input value={ownerForm.last_name} onChange={e => setO('last_name', e.target.value)} /></div>
-                <div className="form-field"><label>Phone</label><input value={ownerForm.phone} onChange={e => setO('phone', e.target.value)} /></div>
+                <div className="form-field"><label>Phone</label><input value={ownerForm.phone_number} onChange={e => setO('phone_number', e.target.value)} /></div>
                 <div className="form-field"><label>Email</label><input type="email" value={ownerForm.email} onChange={e => setO('email', e.target.value)} /></div>
               </div>
-              <div className="form-field"><label>Emergency Contact</label><input value={ownerForm.emergency_contact} onChange={e => setO('emergency_contact', e.target.value)} /></div>
+              <div className="form-field"><label>Emergency Contact</label><input value={ownerForm.emergency_contact_name} onChange={e => setO('emergency_contact_name', e.target.value)} /></div>
               <div className="form-field"><label>Notes</label><textarea value={ownerForm.notes} onChange={e => setO('notes', e.target.value)} /></div>
               <button className="btn btn-secondary btn-sm" onClick={() => setNewOwner(false)}>← Back to Search</button>
             </div>
@@ -270,7 +275,11 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
             <div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-field"><label>Dog Name*</label><input value={dogForm.name} onChange={e => setD('name', e.target.value)} /></div>
-                <div className="form-field"><label>Breed</label><input value={dogForm.breed} onChange={e => setD('breed', e.target.value)} /></div>
+                <div className="form-field">
+                  <label>Breed</label>
+                  <input list="dog-breeds-list-wiz" value={dogForm.breed} onChange={e => setD('breed', e.target.value)} placeholder="Search breeds…" />
+                  <datalist id="dog-breeds-list-wiz">{DOG_BREEDS.map(b => <option key={b} value={b} />)}</datalist>
+                </div>
                 <div className="form-field">
                   <label>Size Class*</label>
                   <select value={dogForm.size_class} onChange={e => setD('size_class', e.target.value)}>
@@ -340,23 +349,39 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
           </p>
           {kennels.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-sub)' }}>No available kennels found.</p>}
           <div className="card" style={{ maxHeight: 280, overflowY: 'auto' }}>
-            {kennels.map(k => (
-              <div
-                key={k.kennel_id}
-                onClick={() => setKennel(k)}
-                style={{
-                  padding: '8px 14px',
-                  cursor: 'pointer',
-                  borderBottom: '1px solid var(--border)',
-                  fontSize: 13,
-                  background: kennel?.kennel_id === k.kennel_id ? '#e3f2fd' : '',
-                }}
-              >
-                <strong>{k.kennel_number}</strong>
-                <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.max_size_class} · {k.sqft} sqft</span>
-                {k.features && <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.features}</span>}
-              </div>
-            ))}
+            {kennels.map(k => {
+              const st = k.current_status || 'Free'
+              const occupied = st === 'Assigned' || st === 'Used'
+              const isHold = st === 'Hold'
+              const selected = kennel?.kennel_id === k.kennel_id
+              const statusColor = occupied ? '#e65100' : isHold ? '#6a1b9a' : '#2e7d32'
+              const statusLabel = occupied ? `${st} — co-house` : st
+              return (
+                <div
+                  key={k.kennel_id}
+                  onClick={() => setKennel(k)}
+                  style={{
+                    padding: '8px 14px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid var(--border)',
+                    fontSize: 13,
+                    background: selected ? '#e3f2fd' : '',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>
+                    <strong>{k.kennel_number}</strong>
+                    <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.max_size_class} · {k.sqft} sqft</span>
+                    {k.features && <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.features}</span>}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: statusColor, marginLeft: 12, whiteSpace: 'nowrap' }}>
+                    {statusLabel}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

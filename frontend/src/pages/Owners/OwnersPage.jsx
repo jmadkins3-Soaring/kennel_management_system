@@ -25,13 +25,13 @@ export default function OwnersPage() {
   async function openDetail(owner) {
     const o = await getOwner(owner.owner_id)
     setSelected(o)
-    setForm({ first_name: o.first_name, last_name: o.last_name, phone: o.phone || '', email: o.email || '', emergency_contact: o.emergency_contact || '', notes: o.notes || '' })
+    setForm({ first_name: o.first_name, last_name: o.last_name, phone_number: o.phone_number || '', email: o.email || '', emergency_contact_name: o.emergency_contact_name || '', emergency_contact_phone: o.emergency_contact_phone || '', notes: o.notes || '' })
     const ds = await getOwnerDogs(o.owner_id)
     setDogs(ds)
   }
 
   function startCreate() {
-    setForm({ first_name: '', last_name: '', phone: '', email: '', emergency_contact: '', notes: '' })
+    setForm({ first_name: '', last_name: '', phone_number: '', email: '', emergency_contact_name: '', emergency_contact_phone: '', notes: '' })
     setCreating(true)
   }
 
@@ -74,7 +74,7 @@ export default function OwnersPage() {
                 : owners.map(o => (
                   <tr key={o.owner_id} onClick={() => openDetail(o)}>
                     <td><strong>{o.last_name}, {o.first_name}</strong></td>
-                    <td>{o.phone || '—'}</td>
+                    <td>{o.phone_number || '—'}</td>
                     <td>{o.email || '—'}</td>
                     <td>{o.emergency_contact || '—'}</td>
                   </tr>
@@ -93,9 +93,9 @@ export default function OwnersPage() {
             </>}
           >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 13, marginBottom: 16 }}>
-              <div><strong>Phone:</strong> {selected.phone || '—'}</div>
+              <div><strong>Phone:</strong> {selected.phone_number || '—'}</div>
               <div><strong>Email:</strong> {selected.email || '—'}</div>
-              <div><strong>Emergency:</strong> {selected.emergency_contact || '—'}</div>
+              <div><strong>Emergency:</strong> {selected.emergency_contact_name || '—'}{selected.emergency_contact_phone ? ` · ${selected.emergency_contact_phone}` : ''}</div>
             </div>
             {selected.notes && <div style={{ fontSize: 13, marginBottom: 12 }}><strong>Notes:</strong> {selected.notes}</div>}
             <div className="divider" />
@@ -121,10 +121,13 @@ export default function OwnersPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="form-field"><label>First Name*</label><input value={form.first_name || ''} onChange={e => setF('first_name', e.target.value)} /></div>
               <div className="form-field"><label>Last Name*</label><input value={form.last_name || ''} onChange={e => setF('last_name', e.target.value)} /></div>
-              <div className="form-field"><label>Phone</label><input value={form.phone || ''} onChange={e => setF('phone', e.target.value)} /></div>
-              <div className="form-field"><label>Email</label><input type="email" value={form.email || ''} onChange={e => setF('email', e.target.value)} /></div>
+              <div className="form-field"><label>Phone*</label><input value={form.phone_number || ''} onChange={e => setF('phone_number', e.target.value)} /></div>
+              <div className="form-field"><label>Email*</label><input type="email" value={form.email || ''} onChange={e => setF('email', e.target.value)} /></div>
             </div>
-            <div className="form-field"><label>Emergency Contact</label><input value={form.emergency_contact || ''} onChange={e => setF('emergency_contact', e.target.value)} /></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="form-field"><label>Emergency Contact Name</label><input value={form.emergency_contact_name || ''} onChange={e => setF('emergency_contact_name', e.target.value)} /></div>
+              <div className="form-field"><label>Emergency Contact Phone</label><input value={form.emergency_contact_phone || ''} onChange={e => setF('emergency_contact_phone', e.target.value)} /></div>
+            </div>
             <div className="form-field"><label>Notes</label><textarea value={form.notes || ''} onChange={e => setF('notes', e.target.value)} /></div>
             {error && <p className="error-text">{error}</p>}
           </Modal>

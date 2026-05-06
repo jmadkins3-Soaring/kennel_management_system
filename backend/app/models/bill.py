@@ -5,6 +5,7 @@ from typing import Optional, List, Any
 from enum import Enum
 import uuid
 
+from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel
 from sqlalchemy import Column, JSON
 
@@ -17,6 +18,8 @@ class LineItemType(str, Enum):
 
 class BillLineItem(SQLModel):
     """Pydantic-only sub-object stored in line_items JSON column."""
+    model_config = ConfigDict(use_enum_values=True)
+
     line_item_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: LineItemType
     description: str = Field(max_length=255)
