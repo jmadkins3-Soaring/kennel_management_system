@@ -23,9 +23,11 @@ function computeSpans(k) {
   while (i < flat.length) {
     const item = flat[i]
     const resId = item.cell.reservation_id
-    if (resId) {
+    // Co-housed cells (multiple residents) are never merged — each phase cell stands alone
+    const hasCoRes = item.cell.co_residents?.length > 0
+    if (resId && !hasCoRes) {
       let j = i + 1
-      while (j < flat.length && flat[j].cell.reservation_id === resId) j++
+      while (j < flat.length && flat[j].cell.reservation_id === resId && !flat[j].cell.co_residents?.length) j++
       spans.push({ ...item, colSpan: j - i, phaseLastBorder: flat[j - 1].isLastPhase })
       i = j
     } else {
@@ -162,12 +164,18 @@ export default function CalendarGrid({ onAction }) {
                     const isPendingCI = status === 'Assigned' && isToday
                     const isPendingCO = status === 'Used' && isToday
                     const merged = span.colSpan > 1
+                    const coRes = span.cell.co_residents || []
+                    const allResidents = [
+                      span.cell.owner_last_name ? { reservation_id: span.cell.reservation_id, owner_last_name: span.cell.owner_last_name } : null,
+                      ...coRes,
+                    ].filter(Boolean)
+                    const titleParts = [`${span.ph} · ${status}`, ...allResidents.map(r => r.owner_last_name).filter(Boolean)]
                     return (
                       <td
                         key={`${span.date}-${span.ph}`}
                         colSpan={span.colSpan}
-                        className={`cal-cell ${cls}${span.phaseLastBorder ? ' phase-last' : ''}${merged ? ' merged' : ''}`}
-                        title={`${span.ph} · ${status}${span.cell.owner_last_name ? ` · ${span.cell.owner_last_name}` : ''}`}
+                        className={`cal-cell ${cls}${span.phaseLastBorder ? ' phase-last' : ''}${merged ? ' merged' : ''}${coRes.length > 0 ? ' co-housed' : ''}`}
+                        title={titleParts.join(' · ')}
                         onClick={e => openMenu(e, {
                           kennelId: k.kennel_id,
                           kennelNumber: k.kennel_number,
@@ -176,11 +184,14 @@ export default function CalendarGrid({ onAction }) {
                           status,
                           reservationId: span.cell.reservation_id || null,
                           ownerLastName: span.cell.owner_last_name || null,
+                          coResidents: coRes,
                         })}
                       >
-                        {span.cell.owner_last_name && (
-                          <span className="cell-label">{span.cell.owner_last_name}</span>
-                        )}
+                        {allResidents.map((r, idx) => (
+                          <span key={r.reservation_id || idx} className={`cell-label${idx > 0 ? ' cell-label-co' : ''}`}>
+                            {r.owner_last_name}
+                          </span>
+                        ))}
                         {(isPendingCI || isPendingCO) && (
                           <span className="cell-pending">{isPendingCI ? '▼' : '▲'}</span>
                         )}

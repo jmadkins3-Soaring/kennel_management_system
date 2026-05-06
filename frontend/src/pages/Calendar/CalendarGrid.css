@@ -97,6 +97,20 @@
   display: block;
 }
 
+.cell-label-co {
+  opacity: .72;
+  font-weight: 500;
+  border-top: 1px dashed rgba(0,0,0,.15);
+  margin-top: 1px;
+  padding-top: 1px;
+}
+
+.cal-cell.co-housed {
+  height: auto;
+  min-height: 38px;
+  padding: 2px 0;
+}
+
 .merged .cell-label {
   max-width: none;
 }

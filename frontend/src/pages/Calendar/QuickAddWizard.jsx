@@ -355,7 +355,12 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
               const isHold = st === 'Hold'
               const selected = kennel?.kennel_id === k.kennel_id
               const statusColor = occupied ? '#e65100' : isHold ? '#6a1b9a' : '#2e7d32'
-              const statusLabel = occupied ? `${st} — co-house` : st
+              const currentDogs = k.current_dogs || []
+              const statusLabel = occupied
+                ? currentDogs.length > 0
+                  ? `${st} — co-house w/ ${currentDogs.map(d => d.dog_name).join(', ')}`
+                  : `${st} — co-house`
+                : st
               return (
                 <div
                   key={k.kennel_id}
@@ -366,19 +371,23 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
                     borderBottom: '1px solid var(--border)',
                     fontSize: 13,
                     background: selected ? '#e3f2fd' : '',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
                   }}
                 >
-                  <span>
-                    <strong>{k.kennel_number}</strong>
-                    <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.max_size_class} · {k.sqft} sqft</span>
-                    {k.features && <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.features}</span>}
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: statusColor, marginLeft: 12, whiteSpace: 'nowrap' }}>
-                    {statusLabel}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>
+                      <strong>{k.kennel_number}</strong>
+                      <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.max_size_class} · {k.sqft} sqft</span>
+                      {k.features && <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.features}</span>}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: statusColor, marginLeft: 12, whiteSpace: 'nowrap' }}>
+                      {occupied ? st : st}
+                    </span>
+                  </div>
+                  {occupied && currentDogs.length > 0 && (
+                    <div style={{ fontSize: 11, color: '#e65100', marginTop: 3 }}>
+                      Co-house with: {currentDogs.map(d => `${d.dog_name} (${d.size_class}, ${d.owner_last_name})`).join(' · ')}
+                    </div>
+                  )}
                 </div>
               )
             })}

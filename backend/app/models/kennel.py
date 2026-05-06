@@ -1,7 +1,7 @@
 """Kennel domain model. Provisioned from kennels.json on startup."""
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from enum import Enum
 import uuid
 
@@ -53,4 +53,5 @@ class KennelUpdate(SQLModel):
 class KennelRead(KennelBase):
     kennel_id: str
     created_at: datetime
-    current_status: Optional[KennelStatus] = None  # injected by route for requested date/phase
+    current_status: Optional[KennelStatus] = None
+    current_dogs: Optional[List[Dict[str, Any]]] = None  # [{dog_name, size_class, owner_last_name}] when occupied

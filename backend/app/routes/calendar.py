@@ -57,72 +57,62 @@ async def _compute_phase_status(
 ) -> Dict[str, Any]:
     """
     Compute kennel status for one phase cell.
-    Precedence: Hold > PostCheckoutHold > Used > Assigned > Free
+    Precedence: Hold > PostCheckoutHold > Used > Assigned > Free.
+    Co-housed dogs (multiple active reservations) are returned via co_residents list.
     """
-    # Check manual admin holds
     for hold in all_holds:
         if hold.kennel_id == kennel_id and hold.active:
             if hold.start_date <= target_date <= hold.end_date:
-                return {"status": "Hold", "reservation_id": None, "owner_last_name": None}
+                return {"status": "Hold", "reservation_id": None, "owner_last_name": None, "co_residents": []}
 
-    phase_dt = _dt_for_phase(target_date, phase)
+    kennel_res = [r for r in all_reservations if r.kennel_id == kennel_id and not r.cancelled]
+    phase_order = {p: i for i, p in enumerate(PHASES)}
 
-    # Find reservations for this kennel
-    kennel_res = [r for r in all_reservations if r.kennel_id == kennel_id]
-
-    # Post-checkout hold: reservation checked out same day and the hold phase matches
+    # PostCheckoutHold is exclusive — no co-housing possible
     for res in kennel_res:
         if res.checkout_datetime and res.checkout_datetime.date() == target_date:
             checkout_phase = _phase_for_dt(res.checkout_datetime)
             try:
-                hold_phase = phase_svc.get_hold_phase(checkout_phase)
-                if hold_phase == phase:
-                    return {
-                        "status": "PostCheckoutHold",
-                        "reservation_id": res.reservation_id,
-                        "owner_last_name": None,
-                    }
+                if phase_svc.get_hold_phase(checkout_phase) == phase:
+                    return {"status": "PostCheckoutHold", "reservation_id": res.reservation_id, "owner_last_name": None, "co_residents": []}
             except ValueError:
                 pass
 
-    # Used: checked in and not yet checked out during this phase window
+    # Collect all reservations active in this phase: (priority, reservation)
+    # priority 0 = Used, 1 = Assigned
+    active: List[tuple] = []
     for res in kennel_res:
-        if res.checkin_datetime is None or res.cancelled:
-            continue
-        checkin_date = res.checkin_datetime.date()
-        # Checked in on or before target_date and not yet checked out (or checkout on a later date)
-        if checkin_date <= target_date:
-            if res.checkout_datetime is None or res.checkout_datetime.date() > target_date:
-                return {
-                    "status": "Used",
-                    "reservation_id": res.reservation_id,
-                    "owner_last_name": None,  # filled in by caller
-                }
-            # Checkout on same day — only Used for phases before checkout phase
-            if res.checkout_datetime.date() == target_date:
-                checkout_phase = _phase_for_dt(res.checkout_datetime)
-                phase_order = {p: i for i, p in enumerate(PHASES)}
-                if phase_order.get(phase, 0) < phase_order.get(checkout_phase, 0):
-                    return {
-                        "status": "Used",
-                        "reservation_id": res.reservation_id,
-                        "owner_last_name": None,
-                    }
+        if res.checkin_datetime is not None:
+            checkin_date = res.checkin_datetime.date()
+            if checkin_date <= target_date:
+                if res.checkout_datetime is None or res.checkout_datetime.date() > target_date:
+                    active.append((0, res))
+                elif res.checkout_datetime.date() == target_date:
+                    co_phase = _phase_for_dt(res.checkout_datetime)
+                    if phase_order.get(phase, 0) < phase_order.get(co_phase, 0):
+                        active.append((0, res))
+        else:
+            dropoff_date = res.dropoff_datetime.date()
+            if dropoff_date <= target_date:
+                active.append((1, res))
 
-    # Assigned: future reservation dropoff day matches or dropoff before target_date
-    for res in kennel_res:
-        if res.cancelled or res.checkin_datetime is not None:
-            continue
-        dropoff_date = res.dropoff_datetime.date()
-        # Assigned if the dropoff falls on target_date (in correct phase or later) or before it
-        if dropoff_date <= target_date:
-            return {
-                "status": "Assigned",
-                "reservation_id": res.reservation_id,
-                "owner_last_name": None,
-            }
+    if not active:
+        return {"status": "Free", "reservation_id": None, "owner_last_name": None, "co_residents": []}
 
-    return {"status": "Free", "reservation_id": None, "owner_last_name": None}
+    active.sort(key=lambda x: (x[0], x[1].reservation_id))
+    primary_priority, primary_res = active[0]
+    primary_status = "Used" if primary_priority == 0 else "Assigned"
+    co_residents = [
+        {"reservation_id": r.reservation_id, "owner_last_name": None}
+        for _, r in active[1:]
+    ]
+
+    return {
+        "status": primary_status,
+        "reservation_id": primary_res.reservation_id,
+        "owner_last_name": None,
+        "co_residents": co_residents,
+    }
 
 
 async def _get_owner_last_name(reservation_id: str, session: AsyncSession, res_map: Dict) -> Optional[str]:
@@ -275,10 +265,13 @@ async def get_calendar(
                 cell = await _compute_phase_status(
                     kennel.kennel_id, target_date, phase, session, all_reservations, all_holds
                 )
-                # Resolve owner_last_name for non-Free cells
                 if cell["reservation_id"]:
                     cell["owner_last_name"] = await _get_owner_last_name(
                         cell["reservation_id"], session, res_map
+                    )
+                for cr in cell.get("co_residents", []):
+                    cr["owner_last_name"] = await _get_owner_last_name(
+                        cr["reservation_id"], session, res_map
                     )
                 phases_data[phase] = cell
             day_cells.append({"date": target_date.isoformat(), "phases": phases_data})
@@ -387,6 +380,10 @@ async def get_calendar_day(
             if cell["reservation_id"]:
                 cell["owner_last_name"] = await _get_owner_last_name(
                     cell["reservation_id"], session, res_map
+                )
+            for cr in cell.get("co_residents", []):
+                cr["owner_last_name"] = await _get_owner_last_name(
+                    cr["reservation_id"], session, res_map
                 )
             flat_cells.append({
                 "kennel_id": kennel.kennel_id,

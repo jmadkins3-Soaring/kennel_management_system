@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..database import get_session
 from ..auth import get_current_user
+from ..models.dog import Dog
 from ..models.kennel import Kennel, KennelRead, KennelUpdate
 from ..models.kennel_hold import KennelHold, KennelHoldCreate
+from ..models.owner import Owner
 from ..models.reservation import Reservation
 from ..models.issue import Issue, IssueRead
 
@@ -93,9 +95,39 @@ async def list_kennels(
         status = await _compute_kennel_status(kennel.kennel_id, session, for_datetime)
         read = KennelRead.model_validate(kennel)
         read.current_status = status
+        if status in ("Used", "Assigned") and for_datetime:
+            read.current_dogs = await _get_current_dogs(kennel.kennel_id, session, for_datetime)
         results.append(read)
 
     return results
+
+
+async def _get_current_dogs(kennel_id: str, session: AsyncSession, for_datetime: datetime) -> list:
+    """Return [{dog_name, size_class, owner_last_name}] for all active reservations in this kennel."""
+    today = for_datetime.date()
+    active = (await session.exec(
+        select(Reservation).where(
+            Reservation.kennel_id == kennel_id,
+            Reservation.cancelled == False,
+        )
+    )).all()
+    result = []
+    for res in active:
+        dropoff_date = res.dropoff_datetime.date()
+        if dropoff_date > today:
+            continue
+        if res.checkout_datetime and res.checkout_datetime.date() < today:
+            continue
+        dog = await session.get(Dog, res.dog_id)
+        if not dog:
+            continue
+        owner = await session.get(Owner, dog.owner_id)
+        result.append({
+            "dog_name": dog.name,
+            "size_class": dog.size_class if isinstance(dog.size_class, str) else dog.size_class.value,
+            "owner_last_name": owner.last_name if owner else "",
+        })
+    return result
 
 
 @router.get("/{kennel_id}", response_model=KennelRead, summary="Get kennel detail")
