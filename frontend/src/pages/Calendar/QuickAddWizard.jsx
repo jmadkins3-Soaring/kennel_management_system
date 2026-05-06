@@ -55,10 +55,10 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
   const [overrideConflict, setOverrideConflict] = useState(false)
   const [conflictMsg, setConflictMsg] = useState('')
 
-  // Step 4: Kennel assignment — one kennel per dog
+  // Step 4: Kennel assignment — click a kennel, check which dogs go in it
   const [kennels, setKennels] = useState([])
-  const [assignments, setAssignments] = useState({})   // dogKey -> kennel object
-  const [focusedKey, setFocusedKey] = useState(null)
+  const [kennelDogs, setKennelDogs] = useState({})   // kennel_id -> dogKey[]
+  const [focusedKennelId, setFocusedKennelId] = useState(null)
 
   // Step 5: Activities
   const [activityTypes, setActivityTypes] = useState([])
@@ -91,16 +91,14 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
     }
     listKennels(params).then(k => {
       setKennels(k)
-      // Pre-assign prefill kennel to the first dog
-      if (prefill?.kennelId && selectedDogs.length > 0) {
-        const pk = k.find(x => x.kennel_id === prefill.kennelId)
-        if (pk) {
-          const firstKey = dogKey(selectedDogs[0])
-          setAssignments({ [firstKey]: pk })
-          setFocusedKey(firstKey)
+      // Pre-focus prefill kennel; pre-assign first dog to it
+      if (prefill?.kennelId) {
+        setFocusedKennelId(prefill.kennelId)
+        if (selectedDogs.length > 0) {
+          setKennelDogs({ [prefill.kennelId]: [dogKey(selectedDogs[0])] })
         }
-      } else if (selectedDogs.length > 0) {
-        setFocusedKey(dogKey(selectedDogs[0]))
+      } else {
+        setFocusedKennelId(null)
       }
     }).catch(() => setKennels([]))
   }, [step, dropoffDate, dropoffTime])
@@ -160,24 +158,40 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
     nextStep()
   }
 
+  // Derive dog->kennel map from kennelDogs for submit/confirm
+  function resolveAssignments() {
+    const map = {}
+    Object.entries(kennelDogs).forEach(([kid, dkeys]) => {
+      const k = kennels.find(x => x.kennel_id === kid)
+      if (k) dkeys.forEach(dk => { map[dk] = k })
+    })
+    return map
+  }
+
+  function toggleDogInKennel(dKey) {
+    if (!focusedKennelId) return
+    setKennelDogs(prev => {
+      const next = {}
+      // Copy all, removing this dog from every kennel
+      Object.entries(prev).forEach(([kid, dkeys]) => {
+        next[kid] = dkeys.filter(k => k !== dKey)
+      })
+      const already = (prev[focusedKennelId] || []).includes(dKey)
+      if (!already) {
+        next[focusedKennelId] = [...(next[focusedKennelId] || []), dKey]
+      }
+      return next
+    })
+  }
+
   function handleKennelStep() {
-    const unassigned = selectedDogs.filter(d => !assignments[dogKey(d)])
+    const assigned = resolveAssignments()
+    const unassigned = selectedDogs.filter(d => !assigned[dogKey(d)])
     if (unassigned.length > 0) {
       setError(`Assign a kennel to: ${unassigned.map(d => d.name).join(', ')}`)
       return
     }
     nextStep()
-  }
-
-  function assignKennel(kennel) {
-    if (!focusedKey) return
-    setAssignments(prev => ({ ...prev, [focusedKey]: kennel }))
-    // Auto-advance focus to next unassigned dog
-    const nextUnassigned = selectedDogs.find(d => {
-      const k = dogKey(d)
-      return k !== focusedKey && !assignments[k]
-    })
-    if (nextUnassigned) setFocusedKey(dogKey(nextUnassigned))
   }
 
   async function handleSubmit() {
@@ -205,10 +219,11 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
       }
 
       // Create one reservation per dog
+      const dogAssignments = resolveAssignments()
       const errors = []
       for (const d of selectedDogs) {
         const realDogId = d.isNew ? dogIdMap[d.tempId] : d.dog_id
-        const kennel = assignments[dogKey(d)]
+        const kennel = dogAssignments[dogKey(d)]
         try {
           await createReservation({
             dog_id: realDogId,
@@ -245,14 +260,6 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
 
   const dropoffPhase = phaseFromTime(dropoffTime)
   const pickupPhase  = phaseFromTime(pickupTime)
-  const focusedDog   = selectedDogs.find(d => dogKey(d) === focusedKey)
-
-  // Which kennels are already assigned to another dog in this batch?
-  const batchAssignedKennelIds = new Set(
-    Object.entries(assignments)
-      .filter(([k]) => k !== focusedKey)
-      .map(([, kn]) => kn.kennel_id)
-  )
 
   return (
     <Modal
@@ -446,68 +453,36 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
         </div>
       )}
 
-      {/* Step 4: Kennel assignment */}
+      {/* Step 4: Kennel assignment — click kennel, check dogs */}
       {step === 4 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, minHeight: 320 }}>
-          {/* Left: dog list */}
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sub)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Dogs</p>
-            {selectedDogs.map(d => {
-              const key = dogKey(d)
-              const assigned = assignments[key]
-              const focused = key === focusedKey
-              return (
-                <div
-                  key={key}
-                  onClick={() => setFocusedKey(key)}
-                  style={{
-                    padding: '8px 10px',
-                    marginBottom: 6,
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    border: focused ? '2px solid var(--color-primary, #1976d2)' : '2px solid var(--border)',
-                    background: focused ? '#e3f2fd' : '#fff',
-                    fontSize: 13,
-                  }}
-                >
-                  <div style={{ fontWeight: 600 }}>{d.name} <span style={{ fontWeight: 400, color: 'var(--text-sub)' }}>({d.size_class})</span></div>
-                  {assigned
-                    ? <div style={{ fontSize: 11, color: '#2e7d32', marginTop: 2 }}>K-{assigned.kennel_number} ✓</div>
-                    : <div style={{ fontSize: 11, color: '#e65100', marginTop: 2 }}>— pick kennel</div>
-                  }
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Right: kennel list */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 16, minHeight: 320 }}>
+          {/* Left: kennel list */}
           <div>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sub)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
-              {focusedDog ? <>Assign kennel to <strong>{focusedDog.name}</strong></> : 'Select a dog first'}
+              Select a kennel
             </p>
-            <div className="card" style={{ maxHeight: 300, overflowY: 'auto', opacity: focusedKey ? 1 : 0.5, pointerEvents: focusedKey ? 'auto' : 'none' }}>
+            <div className="card" style={{ maxHeight: 340, overflowY: 'auto' }}>
               {kennels.length === 0 && <p style={{ padding: 12, fontSize: 13, color: 'var(--text-sub)' }}>No kennels found.</p>}
               {kennels.map(k => {
                 const st = k.current_status || 'Free'
                 const isHold = st === 'Hold'
-                const isBatchAssigned = batchAssignedKennelIds.has(k.kennel_id)
-                const isThisAssigned = focusedKey && assignments[focusedKey]?.kennel_id === k.kennel_id
-                const existingDogs = k.current_dogs || []
-                const statusColor = isHold ? '#6a1b9a' : (st === 'Free' ? '#2e7d32' : '#e65100')
+                const focused = k.kennel_id === focusedKennelId
+                const dogsHere = kennelDogs[k.kennel_id] || []
+                const existingOccupants = k.current_dogs || []
+                const statusColor = isHold ? '#6a1b9a' : st === 'Free' ? '#2e7d32' : '#e65100'
 
                 return (
                   <div
                     key={k.kennel_id}
-                    onClick={() => !isHold && assignKennel(k)}
+                    onClick={() => !isHold && setFocusedKennelId(k.kennel_id)}
                     style={{
                       padding: '8px 12px',
                       borderBottom: '1px solid var(--border)',
                       cursor: isHold ? 'not-allowed' : 'pointer',
-                      background: isThisAssigned ? '#e3f2fd' : isBatchAssigned ? '#f3e5f5' : '',
+                      background: focused ? '#e3f2fd' : '',
+                      border: focused ? '2px solid #1976d2' : '',
                       opacity: isHold ? 0.5 : 1,
                     }}
-                    onMouseEnter={e => { if (!isHold) e.currentTarget.style.background = isThisAssigned ? '#e3f2fd' : '#f5f9ff' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = isThisAssigned ? '#e3f2fd' : isBatchAssigned ? '#f3e5f5' : '' }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
                       <span>
@@ -515,24 +490,53 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
                         <span style={{ color: 'var(--text-sub)', marginLeft: 8 }}>{k.max_size_class} · {k.sqft} sqft</span>
                         {k.features && <span style={{ color: 'var(--text-sub)', marginLeft: 6 }}>{k.features}</span>}
                       </span>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: statusColor }}>
-                        {isThisAssigned ? '✓ selected' : st}
-                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: statusColor }}>{st}</span>
                     </div>
-                    {existingDogs.length > 0 && (
+                    {existingOccupants.length > 0 && (
                       <div style={{ fontSize: 11, color: '#e65100', marginTop: 2 }}>
-                        Co-house: {existingDogs.map(d => `${d.dog_name} (${d.size_class})`).join(' · ')}
+                        Currently: {existingOccupants.map(d => `${d.dog_name} (${d.size_class})`).join(' · ')}
                       </div>
                     )}
-                    {isBatchAssigned && !isThisAssigned && (
-                      <div style={{ fontSize: 11, color: '#6a1b9a', marginTop: 2 }}>
-                        Co-house: {Object.entries(assignments).filter(([, kn]) => kn.kennel_id === k.kennel_id).map(([key]) => selectedDogs.find(d => dogKey(d) === key)?.name).filter(Boolean).join(', ')} (this batch)
+                    {dogsHere.length > 0 && (
+                      <div style={{ fontSize: 11, color: '#1565c0', marginTop: 2 }}>
+                        Assigned: {dogsHere.map(dk => selectedDogs.find(d => dogKey(d) === dk)?.name).filter(Boolean).join(', ')}
                       </div>
                     )}
                   </div>
                 )
               })}
             </div>
+          </div>
+
+          {/* Right: dog checklist for focused kennel */}
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sub)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
+              {focusedKennelId
+                ? <>Dogs in <strong>{kennels.find(k => k.kennel_id === focusedKennelId)?.kennel_number}</strong></>
+                : 'Pick a kennel'}
+            </p>
+            <div style={{ opacity: focusedKennelId ? 1 : 0.4, pointerEvents: focusedKennelId ? 'auto' : 'none' }}>
+              {selectedDogs.map(d => {
+                const dk = dogKey(d)
+                const checked = (kennelDogs[focusedKennelId] || []).includes(dk)
+                const otherKennelId = Object.entries(kennelDogs).find(([kid, dkeys]) => kid !== focusedKennelId && dkeys.includes(dk))?.[0]
+                const otherKennel = otherKennelId ? kennels.find(k => k.kennel_id === otherKennelId) : null
+                return (
+                  <label key={dk} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleDogInKennel(dk)} style={{ marginTop: 2 }} />
+                    <span>
+                      <div style={{ fontWeight: 600 }}>{d.name} <span style={{ fontWeight: 400, color: 'var(--text-sub)' }}>({d.size_class})</span></div>
+                      {otherKennel && !checked && (
+                        <div style={{ fontSize: 11, color: '#e65100' }}>in {otherKennel.kennel_number}</div>
+                      )}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-sub)', marginTop: 12 }}>
+              Check multiple dogs to co-house them in the same kennel.
+            </p>
           </div>
         </div>
       )}
@@ -543,7 +547,7 @@ export default function QuickAddWizard({ prefill, onClose, onSuccess }) {
           <div style={{ fontSize: 13, marginBottom: 16 }}>
             <p style={{ fontWeight: 600, marginBottom: 8 }}>Reservations to create:</p>
             {selectedDogs.map(d => {
-              const kennel = assignments[dogKey(d)]
+              const kennel = resolveAssignments()[dogKey(d)]
               return (
                 <div key={dogKey(d)} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                   <span><strong>{d.name}</strong> <span style={{ color: 'var(--text-sub)' }}>({d.size_class}{d.isNew ? ' · new' : ''})</span></span>
