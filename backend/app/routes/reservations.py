@@ -186,10 +186,8 @@ async def create_reservation(
         )
     ]
 
-    validated_co_occupants: set = set()
-
     if overlapping_res:
-        # Use minimum 1 day for PACFA check on open-ended stays
+        # PACFA multi-dog hard block: always runs for any overlap regardless of intent
         check_days = stay_days if stay_days > 0 else 1
         co_dog_size_classes: List[dict] = []
         for existing in overlapping_res:
@@ -210,14 +208,18 @@ async def create_reservation(
                         f"exceeds kennel {k_sqft:.2f} sqft"
                     ),
                 )
-            # PACFA passed — these are valid co-occupants, not scheduling conflicts
-            validated_co_occupants = {r.reservation_id for r in overlapping_res}
+
+    # Co-housing: same exact dropoff+pickup datetimes = intentional, not a conflict.
+    # Different dates that overlap = phase conflict (soft block, override allowed).
+    validated_co_occupants: set = {
+        r.reservation_id for r in overlapping_res
+        if r.dropoff_datetime == body.dropoff_datetime
+        and r.pickup_datetime == body.pickup_datetime
+    }
 
     override_log: List[dict] = []
 
     # 6. Check kennel availability (phase conflict).
-    # Reservations that passed multi-dog PACFA are valid co-occupants — not conflicts.
-    # Phase conflict only applies to overlapping sequential stays that didn't pass co-housing validation.
     conflicting_res = [
         r for r in overlapping_res
         if r.reservation_id not in validated_co_occupants

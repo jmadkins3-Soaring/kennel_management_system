@@ -15,7 +15,7 @@ services:
       - kennel_data:/data
       - ${NAS_BACKUP_PATH:-/tmp/kennel_backups}:/mnt/nas
     ports:
-      - "9101:9101"
+      - "127.0.0.1:9101:9101"
     networks:
       - kms_net
 

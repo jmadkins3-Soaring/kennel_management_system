@@ -202,13 +202,13 @@ describe('QuickAddWizard — Step 2 (Dog)', () => {
   it('shows validation error when Next is clicked with no dog selected', async () => {
     await goToStep2([])
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
-    expect(screen.getByText(/select or add a dog/i)).toBeInTheDocument()
+    expect(screen.getByText(/select at least one dog/i)).toBeInTheDocument()
   })
 
   it('shows new dog form when "+ Add New Dog" is clicked', async () => {
     await goToStep2([])
     await userEvent.click(screen.getByRole('button', { name: /add new dog/i }))
-    expect(screen.getByText(/dog name/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add to list/i })).toBeInTheDocument()
   })
 })
 
@@ -231,11 +231,12 @@ describe('QuickAddWizard — Step 3 (Dates)', () => {
     await userEvent.type(inputs[1], 'Doe')   // Last Name
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
-    // Step 2: create new dog
+    // Step 2: add new dog — must click "Add to List" then "Next"
     await screen.findByText(/step 2 of 5/i)
     await userEvent.click(screen.getByRole('button', { name: /add new dog/i }))
     const dogInputs = screen.getAllByRole('textbox')
-    await userEvent.type(dogInputs[0], 'Rex')  // Dog Name
+    await userEvent.type(dogInputs[0], 'Rex')
+    await userEvent.click(screen.getByRole('button', { name: /add to list/i }))
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
     await screen.findByText(/step 3 of 5/i)
@@ -312,11 +313,12 @@ describe('QuickAddWizard — Step 5 (Submit)', () => {
     await userEvent.type(inputs[1], 'Doe')
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
-    // Step 2
+    // Step 2 — add new dog: type name, click "Add to List", then Next
     await screen.findByText(/step 2 of 5/i)
     await userEvent.click(screen.getByRole('button', { name: /add new dog/i }))
     const dogInputs = screen.getAllByRole('textbox')
     await userEvent.type(dogInputs[0], 'Rex')
+    await userEvent.click(screen.getByRole('button', { name: /add to list/i }))
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
     // Step 3
@@ -329,8 +331,9 @@ describe('QuickAddWizard — Step 5 (Submit)', () => {
     fireEvent.change(timeInputs[1], { target: { value: '09:00' } })
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
-    // Step 4 — kennel pre-selected via prefill
+    // Step 4 — wait for kennel list to load (pre-assignment via prefill), then Next
     await screen.findByText(/step 4 of 5/i)
+    await screen.findAllByText('K-01')
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
     await screen.findByText(/step 5 of 5/i)
@@ -338,13 +341,13 @@ describe('QuickAddWizard — Step 5 (Submit)', () => {
 
   it('shows confirmation summary on step 5', async () => {
     await goToStep5()
-    expect(screen.getByText(/rex/i)).toBeInTheDocument()
-    expect(screen.getByText(/K-01/)).toBeInTheDocument()
+    expect(screen.getAllByText(/rex/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/K-01/).length).toBeGreaterThan(0)
   })
 
   it('calls createReservation with correct payload on submit', async () => {
     await goToStep5()
-    await userEvent.click(screen.getByRole('button', { name: /create reservation/i }))
+    await userEvent.click(screen.getByRole('button', { name: /create.*reservation/i }))
     await waitFor(() => expect(reservationsApi.createReservation).toHaveBeenCalledWith(
       expect.objectContaining({
         dog_id: DOG.dog_id,
@@ -370,6 +373,7 @@ describe('QuickAddWizard — Step 5 (Submit)', () => {
     await userEvent.click(screen.getByRole('button', { name: /add new dog/i }))
     inputs = screen.getAllByRole('textbox')
     await userEvent.type(inputs[0], 'Rex')
+    await userEvent.click(screen.getByRole('button', { name: /add to list/i }))
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
     await screen.findByText(/step 3 of 5/i)
@@ -382,10 +386,11 @@ describe('QuickAddWizard — Step 5 (Submit)', () => {
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
     await screen.findByText(/step 4 of 5/i)
+    await screen.findAllByText('K-01')
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
     await screen.findByText(/step 5 of 5/i)
-    await userEvent.click(screen.getByRole('button', { name: /create reservation/i }))
+    await userEvent.click(screen.getByRole('button', { name: /create.*reservation/i }))
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled())
   })
@@ -395,7 +400,7 @@ describe('QuickAddWizard — Step 5 (Submit)', () => {
       response: { data: { detail: 'Kennel not available' } },
     })
     await goToStep5()
-    await userEvent.click(screen.getByRole('button', { name: /create reservation/i }))
-    await screen.findByText('Kennel not available')
+    await userEvent.click(screen.getByRole('button', { name: /create.*reservation/i }))
+    await screen.findByText(/kennel not available/i)
   })
 })
