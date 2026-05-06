@@ -3,6 +3,14 @@
 # Usage: ./scripts/qa.sh [--skip-e2e] [--skip-bandit] [--skip-migration]
 set -euo pipefail
 
+# Load nvm so Node ≥18 is on PATH for frontend steps.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck disable=SC1091
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" --no-use
+if command -v nvm &>/dev/null; then
+  nvm use default --silent 2>/dev/null || true
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
 FRONTEND_DIR="$REPO_ROOT/frontend"
