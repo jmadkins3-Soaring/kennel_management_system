@@ -1,0 +1,17 @@
+# Python artefacts — exclude from backend image build
+backend/.venv
+backend/__pycache__
+backend/**/__pycache__
+backend/.coverage
+backend/.pytest_cache
+backend/**/.pytest_cache
+backend/tests
+
+# Frontend — not needed in backend image
+frontend/
+
+# Git / docs
+.git
+.gitignore
+software_spec_0.3
+README.md
