@@ -15,28 +15,24 @@ If any day missing, 3.0x applies for the ENTIRE stay.
 
 from typing import List
 
+from ..config import get_pacfa
 from .phase import get_pacfa_multiplier
-
-# Implemented by Agent B (PACFA & Phase Engine stream)
 
 SIZE_CLASS_ORDER = ["XS", "S", "M", "L", "XL"]
 
-SIZE_CLASSES = {
-    "XS": {"est_length_in": 12, "base_sqft": 2.25},
-    "S":  {"est_length_in": 18, "base_sqft": 4.00},
-    "M":  {"est_length_in": 24, "base_sqft": 6.25},
-    "L":  {"est_length_in": 30, "base_sqft": 9.00},
-    "XL": {"est_length_in": 36, "base_sqft": 12.25},
-}
+
+def _size_classes() -> dict:
+    return get_pacfa()["size_classes"]
 
 
 def required_sqft(size_class: str, stay_days: int, has_daily_qualifying_activity: bool = False) -> float:
     """Return required sqft for a dog given its size class and stay duration."""
     if stay_days <= 0:
         raise ValueError(f"stay_days must be a positive integer, got {stay_days}")
-    if size_class not in SIZE_CLASSES:
+    size_classes = _size_classes()
+    if size_class not in size_classes:
         raise ValueError(f"Unknown size class: {size_class!r}. Must be one of {SIZE_CLASS_ORDER}.")
-    base = SIZE_CLASSES[size_class]["base_sqft"]
+    base = size_classes[size_class]["base_sqft"]
     multiplier = get_pacfa_multiplier(stay_days, has_daily_qualifying_activity)
     return base * multiplier
 

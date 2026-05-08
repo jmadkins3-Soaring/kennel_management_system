@@ -13,22 +13,15 @@ import uuid
 from datetime import date
 from typing import List
 
-# Hardcoded rates — do not use config loader here (tests run without config files)
-NIGHTLY_RATES: dict[str, float] = {
-    "XS": 25.00,
-    "S": 30.00,
-    "M": 35.00,
-    "L": 40.00,
-    "XL": 45.00,
-}
+from ..config import get_pricing
 
-ACTIVITY_PRICES: dict[str, float] = {
-    "Nature Walk": 15.00,
-    "Playtime": 10.00,
-    "Medication Administration": 5.00,
-    "Emergency Grooming": 30.00,
-    "Play Yard": 12.00,
-}
+
+def _nightly_rates() -> dict[str, float]:
+    return get_pricing()["nightly_rates"]
+
+
+def _activity_prices() -> dict[str, float]:
+    return get_pricing()["activity_prices"]
 
 
 def generate_bill(
@@ -43,7 +36,7 @@ def generate_bill(
 
     # KennelStay line item — inclusive count on both ends
     nights = (cycle_end - cycle_start).days + 1
-    unit_price = NIGHTLY_RATES.get(size_class, 0.00)
+    unit_price = _nightly_rates().get(size_class, 0.00)
     stay_amount = unit_price * nights
     line_items.append(
         {
@@ -63,7 +56,7 @@ def generate_bill(
         if not activity.get("performed_datetime") or not activity.get("performed_by"):
             continue
         activity_type = activity.get("activity_type", "")
-        price = ACTIVITY_PRICES.get(activity_type, 0.00)
+        price = _activity_prices().get(activity_type, 0.00)
         quantity = 1.0
         amount = price * quantity
         line_items.append(

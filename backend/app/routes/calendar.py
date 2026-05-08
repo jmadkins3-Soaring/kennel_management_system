@@ -16,13 +16,15 @@ from ..models.kennel import Kennel
 from ..models.kennel_hold import KennelHold
 from ..models.owner import Owner
 from ..models.reservation import Reservation
+from ..config import get_system
 from ..services import billing as billing_svc
 from ..services import phase as phase_svc
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
-# From system.json
-PICKUP_OVERDUE_THRESHOLD_HOURS = 3
+
+def _overdue_threshold_hours() -> int:
+    return get_system().get("pickup_overdue_threshold_hours", 3)
 # Duration (in days) that triggers PACFA 181-day alert
 PACFA_LONG_STAY_DAYS = 181
 
@@ -283,7 +285,7 @@ async def get_calendar(
         })
 
     # Overdue pickups
-    overdue_threshold = now - timedelta(hours=PICKUP_OVERDUE_THRESHOLD_HOURS)
+    overdue_threshold = now - timedelta(hours=_overdue_threshold_hours())
     overdue_pickups = []
     for res in all_reservations:
         if res.cancelled or res.checkout_datetime is not None:
@@ -405,7 +407,7 @@ async def get_overdue_pickups(
     Includes dog name, owner last name, kennel number, time overdue.
     """
     now = datetime.now(timezone.utc)
-    overdue_threshold = now - timedelta(hours=PICKUP_OVERDUE_THRESHOLD_HOURS)
+    overdue_threshold = now - timedelta(hours=_overdue_threshold_hours())
 
     stmt = select(Reservation).where(
         Reservation.cancelled == False,

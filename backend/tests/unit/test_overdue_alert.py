@@ -7,30 +7,7 @@ Alert fires exactly once per reservation (pickup_overdue_alerted flag).
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from freezegun import freeze_time
-from app.services.phase import get_phase
-
-
-# ── Overdue detection helper ───────────────────────────────────────────────────
-# The actual overdue check lives in the reservation service / background job.
-# These tests validate the phase + threshold math that drives that check.
-
-def is_pickup_overdue(
-    scheduled_pickup: datetime,
-    current_time: datetime,
-    threshold_hours: int = 3,
-) -> bool:
-    """
-    Return True if current_time is more than threshold_hours past scheduled_pickup
-    AND scheduled_pickup is NOT in Night phase (no checkouts in Night).
-    Imported here from reservation service once implemented.
-    """
-    from app.services.phase import get_phase as gp
-    pickup_phase = gp(scheduled_pickup)
-    if pickup_phase == "Night":
-        return False  # Night pickups not permitted; can't be overdue
-    overdue_at = scheduled_pickup + timedelta(hours=threshold_hours)
-    return current_time >= overdue_at
+from app.services.overdue import is_pickup_overdue
 
 
 @pytest.mark.parametrize("scheduled_hour,minutes_past,is_overdue", [
