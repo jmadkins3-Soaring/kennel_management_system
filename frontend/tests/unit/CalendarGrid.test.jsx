@@ -152,4 +152,117 @@ describe('CalendarGrid', () => {
     const amHeaders = screen.getAllByText('AM')
     expect(amHeaders).toHaveLength(10)
   })
+
+  // ── Span-merging: continuous reservation bars ──────────────────────────────
+
+  it('merges all phases of a single reservation into one continuous cell', async () => {
+    // All 4 phases of the same reservation_id must collapse into one <td colSpan=4>,
+    // not four separate boxes. Regression guard for the co-housing refactor.
+    const data = {
+      alerts: [],
+      kennels: [{
+        kennel_id: 'k1',
+        kennel_number: 'K-01',
+        days: [{
+          date: '2026-05-06',
+          phases: {
+            Morning:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [] },
+            Afternoon: { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [] },
+            Evening:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [] },
+            Night:     { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [] },
+          },
+        }],
+      }],
+    }
+    calendarApi.getCalendar.mockResolvedValue(data)
+    render(<CalendarGrid />)
+    await screen.findByText('K-01')
+
+    const cells = document.querySelectorAll('td.cal-cell')
+    expect(cells).toHaveLength(1)
+    expect(cells[0].colSpan).toBe(4)
+    expect(screen.getAllByText('Jones')).toHaveLength(1)
+  })
+
+  it('merges co-housed reservation phases into one continuous cell', async () => {
+    // When co_residents are present, phases of the primary reservation must still
+    // merge into a single span — not one box per 6-hour window.
+    const data = {
+      alerts: [],
+      kennels: [{
+        kennel_id: 'k1',
+        kennel_number: 'K-01',
+        days: [{
+          date: '2026-05-06',
+          phases: {
+            Morning:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Afternoon: { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Evening:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Night:     { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+          },
+        }],
+      }],
+    }
+    calendarApi.getCalendar.mockResolvedValue(data)
+    render(<CalendarGrid />)
+    await screen.findByText('K-01')
+
+    const cells = document.querySelectorAll('td.cal-cell')
+    expect(cells).toHaveLength(1)
+    expect(cells[0].colSpan).toBe(4)
+  })
+
+  it('shows both primary and co-resident names within a merged co-housed span', async () => {
+    // Co-resident names must appear in the merged bar, not be lost by the merge.
+    const data = {
+      alerts: [],
+      kennels: [{
+        kennel_id: 'k1',
+        kennel_number: 'K-01',
+        days: [{
+          date: '2026-05-06',
+          phases: {
+            Morning:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Afternoon: { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Evening:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [] },
+            Night:     { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [] },
+          },
+        }],
+      }],
+    }
+    calendarApi.getCalendar.mockResolvedValue(data)
+    render(<CalendarGrid />)
+    await screen.findByText('K-01')
+
+    expect(screen.getByText('Jones')).toBeInTheDocument()
+    expect(screen.getByText('Smith')).toBeInTheDocument()
+    // Still one merged cell
+    expect(document.querySelectorAll('td.cal-cell')).toHaveLength(1)
+  })
+
+  it('deduplicates co-residents collected across merged phases', async () => {
+    // The same co-resident appearing in multiple phases of a merged span must
+    // only produce one co-resident label, not one per phase.
+    const data = {
+      alerts: [],
+      kennels: [{
+        kennel_id: 'k1',
+        kennel_number: 'K-01',
+        days: [{
+          date: '2026-05-06',
+          phases: {
+            Morning:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Afternoon: { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Evening:   { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+            Night:     { status: 'Assigned', owner_last_name: 'Jones', reservation_id: 'r-a', co_residents: [{ reservation_id: 'r-b', owner_last_name: 'Smith' }] },
+          },
+        }],
+      }],
+    }
+    calendarApi.getCalendar.mockResolvedValue(data)
+    render(<CalendarGrid />)
+    await screen.findByText('K-01')
+
+    expect(screen.getAllByText('Smith')).toHaveLength(1)
+  })
 })

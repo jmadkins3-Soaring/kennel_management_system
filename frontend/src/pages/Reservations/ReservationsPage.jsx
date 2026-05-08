@@ -73,7 +73,7 @@ export default function ReservationsPage() {
                     onClick={() => setSelected(r.reservation_id)}
                     style={r.reservation_id === highlight ? { background: '#e3f2fd' } : {}}
                   >
-                    <td>{r.dog_id}</td>
+                    <td>{r.dog_name || r.dog_id}</td>
                     <td>—</td>
                     <td>{r.kennel_id}</td>
                     <td>{fmt(r.dropoff_datetime)}</td>

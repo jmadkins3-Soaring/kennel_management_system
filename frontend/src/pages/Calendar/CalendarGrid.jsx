@@ -23,12 +23,18 @@ function computeSpans(k) {
   while (i < flat.length) {
     const item = flat[i]
     const resId = item.cell.reservation_id
-    // Co-housed cells (multiple residents) are never merged — each phase cell stands alone
-    const hasCoRes = item.cell.co_residents?.length > 0
-    if (resId && !hasCoRes) {
+    if (resId) {
       let j = i + 1
-      while (j < flat.length && flat[j].cell.reservation_id === resId && !flat[j].cell.co_residents?.length) j++
-      spans.push({ ...item, colSpan: j - i, phaseLastBorder: flat[j - 1].isLastPhase })
+      while (j < flat.length && flat[j].cell.reservation_id === resId) j++
+      // Collect unique co-residents across all merged phases
+      const coResMap = new Map()
+      for (let m = i; m < j; m++) {
+        ;(flat[m].cell.co_residents || []).forEach(r => {
+          if (!coResMap.has(r.reservation_id)) coResMap.set(r.reservation_id, r)
+        })
+      }
+      const mergedCell = { ...item.cell, co_residents: [...coResMap.values()] }
+      spans.push({ ...item, cell: mergedCell, colSpan: j - i, phaseLastBorder: flat[j - 1].isLastPhase })
       i = j
     } else {
       spans.push({ ...item, colSpan: 1, phaseLastBorder: item.isLastPhase })

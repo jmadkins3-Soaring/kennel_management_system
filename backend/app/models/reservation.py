@@ -77,6 +77,7 @@ class CheckOutRequest(SQLModel):
 
 class ReservationRead(ReservationBase):
     reservation_id: str
+    dog_name: Optional[str] = None          # denormalized for list display
     dropoff_phase: Optional[Phase] = None   # computed
     pickup_phase: Optional[Phase] = None    # computed
     stay_duration_days: Optional[int] = None  # computed

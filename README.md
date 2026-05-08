@@ -16,6 +16,7 @@ Internal web application for managing dog boarding reservations, scheduling, bil
 8. [Key Business Rules](#8-key-business-rules)
 9. [API Base URL and Conventions](#9-api-base-url-and-conventions)
 10. [Common Troubleshooting](#10-common-troubleshooting)
+11. [Restarting Containers (restart.sh)](#11-restarting-containers-restartsh)
 
 ---
 
@@ -25,6 +26,7 @@ Internal web application for managing dog boarding reservations, scheduling, bil
 /home/home/claud_code_folder/code/kennel_mgmt_system/
 ├── README.md                        This file
 ├── build.sh                         Full build + deploy script (npm → Docker → nginx)
+├── restart.sh                       Fast rebuild + restart script (skips npm build; see §11)
 ├── docker-compose.yml               Production container definitions (backend + frontend)
 ├── software_spec_0.3                System specification document (v3.0)
 │
@@ -560,3 +562,55 @@ sudo mount -t nfs <nas-ip>:/share /mnt/nas
 export NAS_BACKUP_PATH=/mnt/nas
 docker compose up -d
 ```
+
+---
+
+## 11. Restarting Containers (restart.sh)
+
+`restart.sh` is the day-to-day restart tool for applying code or config changes without running a full `build.sh`. It rebuilds Docker images with `--no-cache`, works around AppArmor's interference with container teardown, and blocks until the backend health check passes.
+
+### What it does (in order)
+1. Rebuilds Docker images (`--no-cache`) for the specified service(s)
+2. Stops AppArmor (`systemctl stop apparmor`) — required to kill container PIDs cleanly on this host
+3. Sends `SIGKILL` to each container's init PID
+4. Removes the stopped containers (`docker rm -f`)
+5. Starts fresh containers (`docker compose up -d`)
+6. Restarts AppArmor (`systemctl start apparmor`)
+7. Polls `GET /api/health` every 2 seconds (up to 30 s) and exits non-zero if the backend never responds
+
+### Usage
+```bash
+# Restart both backend and frontend
+sudo ./restart.sh
+
+# Backend only (faster — skips frontend rebuild)
+sudo ./restart.sh backend
+
+# Frontend only
+sudo ./restart.sh frontend
+```
+
+`restart.sh` must be run as root (it will exit with an error otherwise). Use `build.sh` instead when you also need to rebuild the React bundle (`npm run build`).
+
+### Passwordless sudo for restart.sh
+
+To run `sudo ./restart.sh` without a password prompt, add a targeted sudoers rule scoped to this script only:
+
+```bash
+sudo visudo -f /etc/sudoers.d/kms-restart
+```
+
+Add this single line (replace `home` with your username if different):
+```
+home ALL=(ALL) NOPASSWD: /home/home/claud_code_folder/code/kennel_mgmt_system/restart.sh
+```
+
+Save and exit. Verify the syntax was accepted (visudo validates on save) and test:
+```bash
+sudo ./restart.sh backend
+```
+
+**Notes:**
+- This grants passwordless root only for this one script path. If the script is moved or renamed, the rule stops matching and sudo will prompt again.
+- The script itself must not be world-writable (`chmod 750 restart.sh`) — sudo will refuse to run a world-writable script even with a NOPASSWD rule.
+- Do not use `NOPASSWD: ALL` or `NOPASSWD: /usr/bin/docker` — those grant far broader access than needed.

@@ -40,7 +40,7 @@ class ReservationCreateRequest(ReservationCreate):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _enrich_reservation(res: Reservation) -> ReservationRead:
+def _enrich_reservation(res: Reservation, dog_name: Optional[str] = None) -> ReservationRead:
     """Build a ReservationRead with computed phase and stay_duration_days fields."""
     data = res.model_dump()
     data["dropoff_phase"] = get_phase(res.dropoff_datetime)
@@ -49,6 +49,8 @@ def _enrich_reservation(res: Reservation) -> ReservationRead:
         data["stay_duration_days"] = compute_stay_duration_days(
             res.dropoff_datetime, res.pickup_datetime
         )
+    if dog_name is not None:
+        data["dog_name"] = dog_name
     return ReservationRead(**data)
 
 
@@ -115,7 +117,14 @@ async def list_reservations(
 
     result = await session.exec(stmt)
     reservations = result.all()
-    return [_enrich_reservation(r) for r in reservations]
+
+    dog_ids = list({r.dog_id for r in reservations})
+    dog_names: dict = {}
+    if dog_ids:
+        dog_result = await session.exec(select(Dog).where(Dog.dog_id.in_(dog_ids)))
+        dog_names = {d.dog_id: d.name for d in dog_result.all()}
+
+    return [_enrich_reservation(r, dog_name=dog_names.get(r.dog_id)) for r in reservations]
 
 
 @router.post("", response_model=ReservationRead, status_code=201, summary="Create reservation (Quick Add)")
