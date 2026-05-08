@@ -48,7 +48,10 @@ export default function NavBar() {
 
   return (
     <nav className="navbar">
-      <div className="navbar-brand">Soaring Heights</div>
+      <div className="navbar-brand">
+        <img src="/logo.png" alt="Soaring Heights" className="navbar-logo" />
+        <span>Soaring Heights</span>
+      </div>
       <div className="navbar-links">
         <NavLink to="/calendar"     className={({ isActive }) => isActive ? 'active' : ''}>Calendar</NavLink>
         <NavLink to="/reservations" className={({ isActive }) => isActive ? 'active' : ''}>Reservations</NavLink>

@@ -12,12 +12,24 @@
 }
 
 .navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 20px;
   font-weight: 700;
   font-size: 15px;
   white-space: nowrap;
   letter-spacing: .02em;
   border-right: 1px solid rgba(255,255,255,.15);
+}
+
+.navbar-logo {
+  height: 32px;
+  width: 32px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: #fff;
+  padding: 2px;
 }
 
 .navbar-links {
