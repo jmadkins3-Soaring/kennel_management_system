@@ -43,10 +43,15 @@ def _business_header_html(biz: dict) -> str:
     name = biz.get("name", "Kennel Management")
     address = biz.get("address", "")
     phone = biz.get("phone", "")
+    logo_path = biz.get("logo_path", "")
+    logo_html = ""
+    if logo_path and os.path.exists(logo_path):
+        logo_html = f'<img src="file://{logo_path}" alt="{name}" style="height:72px;width:72px;object-fit:contain;margin-bottom:6px;">'
     return (
-        f'<div class="header">'
-        f"<h1>{name}</h1>"
-        f"<p>{address} | {phone}</p>"
+        f'<div class="header" style="display:flex;align-items:center;gap:16px;">'
+        f'<div style="flex-shrink:0;">{logo_html}</div>'
+        f'<div><h1 style="margin:0 0 2px;">{name}</h1>'
+        f"<p style=\"margin:0;\">{address} | {phone}</p></div>"
         f"</div>"
     )
 

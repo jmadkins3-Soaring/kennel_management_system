@@ -19,6 +19,13 @@
   text-align: center;
   margin-bottom: 28px;
 }
+.login-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 12px;
+}
 .login-title h1 { font-size: 22px; font-weight: 700; color: #1565c0; }
 .login-title p  { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
 

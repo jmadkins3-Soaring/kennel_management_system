@@ -31,6 +31,7 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-title">
+          <img src="/logo.png" alt="Soaring Heights" className="login-logo" />
           <h1>Soaring Heights</h1>
           <p>Kennel Management System</p>
         </div>
