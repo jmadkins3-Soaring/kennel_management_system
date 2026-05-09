@@ -17,8 +17,29 @@ from .routes import (
 logger = logging.getLogger(__name__)
 
 
+_INSECURE_SECRET = "CHANGE_ME_IN_PRODUCTION"
+
+
+def _validate_secrets() -> None:
+    """Abort startup if any secret is still set to its insecure placeholder."""
+    from .auth import SECRET_KEY as _sk
+    from .routes.portal import PORTAL_SECRET as _ps
+    bad = []
+    if not _sk or _INSECURE_SECRET in _sk:
+        bad.append("SECRET_KEY")
+    if not _ps or _INSECURE_SECRET in _ps:
+        bad.append("PORTAL_SECRET_KEY (or SECRET_KEY)")
+    if bad:
+        raise RuntimeError(
+            f"Insecure placeholder detected for: {', '.join(bad)}. "
+            "Set a strong random value via environment variables before starting. "
+            "Generate one with: openssl rand -hex 32"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _validate_secrets()
     logger.info("Starting Kennel Management System backend")
     await _run_migrations()
     await _provision_kennels()
@@ -58,6 +79,14 @@ async def health():
     return {"status": "ok"}
 
 
+def _split_sql_statements(sql: str) -> list:
+    """Split SQL source into individual statements, stripping line and block comments."""
+    import re
+    sql = re.sub(r'/\*.*?\*/', '', sql, flags=re.DOTALL)  # block comments
+    sql = re.sub(r'--[^\n]*', '', sql)                     # line comments
+    return [s.strip() for s in sql.split(';') if s.strip()]
+
+
 async def _run_migrations() -> None:
     """Apply pending versioned SQL migration scripts from /backend/migrations/."""
     import glob
@@ -76,11 +105,13 @@ async def _run_migrations() -> None:
             filename = os.path.basename(script_path)
             if filename not in applied:
                 logger.info("Applying migration: %s", filename)
-                sql = open(script_path).read()
-                for statement in sql.split(";"):
-                    stmt = statement.strip()
-                    if stmt:
-                        await conn.execute(text(stmt))
+                try:
+                    with open(script_path, encoding="utf-8") as f:
+                        sql = f.read()
+                except OSError as exc:
+                    raise RuntimeError(f"Cannot read migration file {script_path}: {exc}") from exc
+                for stmt in _split_sql_statements(sql):
+                    await conn.execute(text(stmt))
                 await conn.execute(text("INSERT INTO schema_migrations (filename) VALUES (:f)"), {"f": filename})
                 logger.info("Migration applied: %s", filename)
 

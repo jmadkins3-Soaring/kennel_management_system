@@ -2,7 +2,6 @@
   "server":       "smtp.example.com",
   "port":         587,
   "username":     "kennel@example.com",
-  "password":     "CHANGE_ME",
   "from_address": "kennel@soaringheightskennel.com",
   "use_tls":      true
 }

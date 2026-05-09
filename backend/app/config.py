@@ -34,9 +34,22 @@ def get_pacfa() -> dict:
     return _load("pacfa.json")
 
 
-@lru_cache(maxsize=None)
 def get_smtp() -> dict:
-    return _load("smtp.json")
+    """Return SMTP config with password injected from SMTP_PASSWORD env var.
+
+    The smtp.json file must NOT contain a password; the credential is supplied
+    exclusively via the SMTP_PASSWORD environment variable so it is never stored
+    in the repository or on disk as plain text.
+    """
+    cfg = _load("smtp.json")
+    password = os.environ.get("SMTP_PASSWORD", "")
+    if not password:
+        import logging
+        logging.getLogger(__name__).warning(
+            "SMTP_PASSWORD env var is not set — outbound email will fail"
+        )
+    cfg["password"] = password
+    return cfg
 
 
 @lru_cache(maxsize=None)

@@ -7,7 +7,8 @@ services:
     environment:
       DB_PATH: /data/kennel.db
       CONFIG_DIR: /config
-      SECRET_KEY: ${KMS_SECRET_KEY:-CHANGE_ME_IN_PRODUCTION}
+      SECRET_KEY: "${KMS_SECRET_KEY:?KMS_SECRET_KEY must be set (generate with: openssl rand -hex 32)}"
+      SMTP_PASSWORD: "${KMS_SMTP_PASSWORD:?KMS_SMTP_PASSWORD must be set}"
       RECEIPTS_DIR: /tmp/receipts
       REPORTS_DIR: /tmp/reports
     volumes:

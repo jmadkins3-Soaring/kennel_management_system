@@ -21,7 +21,7 @@ RUN echo "15 1 * * * python /app/scripts/backup.py >> /proc/1/fd/1 2>&1" | cront
 
 ENV DB_PATH=/data/kennel.db
 ENV CONFIG_DIR=/config
-ENV SECRET_KEY=CHANGE_ME_IN_PRODUCTION
+# SECRET_KEY and SMTP_PASSWORD must be supplied at runtime — never bake secrets into the image
 
 EXPOSE 9101
 
