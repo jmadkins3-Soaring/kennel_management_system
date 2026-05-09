@@ -1,7 +1,12 @@
 """IAT: Owner self-service portal (Spec §8.6)."""
 
 import pytest
+from app.routes.portal import _generate_session_token
 from .conftest import create_owner, create_dog, get_first_large_kennel, create_reservation
+
+
+def _portal_headers(owner_id: str) -> dict:
+    return {"X-Portal-Token": _generate_session_token(owner_id)}
 
 
 @pytest.mark.asyncio
@@ -32,14 +37,15 @@ async def test_portal_shows_only_owners_dogs(iat_client, iat_headers):
     """Portal /dogs returns only this owner's dogs. No other owner data."""
     owner1 = await create_owner(iat_client, iat_headers, last_name="PortalOwner1")
     owner2 = await create_owner(iat_client, iat_headers, last_name="PortalOwner2")
-    dog1 = await create_dog(iat_client, iat_headers, owner_id=owner1["owner_id"])
-    dog2 = await create_dog(iat_client, iat_headers, owner_id=owner2["owner_id"])
+    dog1 = await create_dog(iat_client, iat_headers, owner_id=owner1["owner_id"], name="DogAlpha")
+    dog2 = await create_dog(iat_client, iat_headers, owner_id=owner2["owner_id"], name="DogBeta")
 
-    # Portal request for owner1
-    r = await iat_client.post("/api/portal/request-link", params={"email": owner1["email"]})
+    r = await iat_client.get("/api/portal/dogs",
+                             headers=_portal_headers(owner1["owner_id"]))
     assert r.status_code == 200
-    # With a real token, portal should only return dog1, not dog2
-    # Full assertion requires token extraction — flagged for Agent H
+    names = [d["name"] for d in r.json()]
+    assert "DogAlpha" in names
+    assert "DogBeta" not in names
 
 
 @pytest.mark.asyncio
@@ -62,17 +68,23 @@ async def test_portal_availability_shows_free_vs_busy(iat_client, iat_headers):
 
 
 @pytest.mark.asyncio
-async def test_portal_self_booking_enforces_all_validation(iat_client, iat_headers):
-    """Portal self-booking applies full PACFA and size class validation with no override capability."""
-    # Portal-booked reservations must reject PACFA violations without override
-    # Detailed flow requires portal token — flagged for Agent H implementation
+async def test_portal_self_booking_enforces_size_class_validation(iat_client, iat_headers):
+    """Portal booking rejects size class violation — no override capability."""
+    owner = await create_owner(iat_client, iat_headers)
+    # XL dog cannot fit in a Small kennel (max_size_class=M)
+    dog = await create_dog(iat_client, iat_headers, owner_id=owner["owner_id"], size_class="XL")
+    small_kennels = [k for k in (await iat_client.get("/api/kennels",
+                                 headers=iat_headers)).json()
+                     if k["kennel_type"] == "Small"]
+    small_kennel = small_kennels[0]
+
     r = await iat_client.post("/api/portal/reservations", json={
-        "dog_id": "fake", "kennel_id": "fake",
-        "dropoff_datetime": "2026-06-10T09:00:00",
-        "pickup_datetime": "2026-06-13T10:00:00",
-    })
-    # Must not be 501 (not implemented) — must be 401 (auth) or validation error
-    assert r.status_code != 501
+        "dog_id": dog["dog_id"],
+        "kennel_id": small_kennel["kennel_id"],
+        "dropoff_datetime": "2026-07-01T09:00:00",
+        "pickup_datetime": "2026-07-05T10:00:00",
+    }, headers=_portal_headers(owner["owner_id"]))
+    assert r.status_code == 422
 
 
 @pytest.mark.asyncio

@@ -65,6 +65,9 @@ async def _compute_phase_status(
     for hold in all_holds:
         if hold.kennel_id == kennel_id and hold.active:
             if hold.start_date <= target_date <= hold.end_date:
+                # On the checkout day itself, defer to PostCheckoutHold logic below
+                if hold.reason == "post_checkout_hold" and hold.start_date == target_date:
+                    continue
                 return {"status": "Hold", "reservation_id": None, "owner_last_name": None, "co_residents": []}
 
     kennel_res = [r for r in all_reservations if r.kennel_id == kennel_id and not r.cancelled]
