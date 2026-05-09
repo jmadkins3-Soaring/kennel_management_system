@@ -56,7 +56,10 @@ def generate_bill(
         if not activity.get("performed_datetime") or not activity.get("performed_by"):
             continue
         activity_type = activity.get("activity_type", "")
-        price = _activity_prices().get(activity_type, 0.00)
+        price = _activity_prices().get(
+            activity_type,
+            get_pricing().get("single_activity_price", 0.00),
+        )
         quantity = 1.0
         amount = price * quantity
         line_items.append(

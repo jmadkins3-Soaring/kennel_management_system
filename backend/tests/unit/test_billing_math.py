@@ -13,7 +13,7 @@ from app.services.billing import generate_bill, apply_discount, check_14day_cycl
 # ── Line item total calculation ────────────────────────────────────────────────
 
 def test_kennel_stay_line_item_math():
-    """3 nights at L rate (40.00/night) = 120.00."""
+    """3 nights at flat rate (60.00/night) = 180.00."""
     bill = generate_bill(
         reservation_id="res-001",
         cycle_start=date(2026, 5, 1),
@@ -22,13 +22,13 @@ def test_kennel_stay_line_item_math():
         activities=[],
     )
     stay_item = next(i for i in bill["line_items"] if i["type"] == "KennelStay")
-    assert stay_item["unit_price"] == pytest.approx(40.00)
+    assert stay_item["unit_price"] == pytest.approx(60.00)
     assert stay_item["quantity"] == 3
-    assert stay_item["amount"] == pytest.approx(120.00)
+    assert stay_item["amount"] == pytest.approx(180.00)
 
 
 def test_activity_line_item_math():
-    """2 Nature Walks at 15.00 each = 30.00."""
+    """2 Nature Walks at 10.00 each = 20.00."""
     activities = [
         {"activity_type": "Nature Walk", "performed_datetime": "2026-05-01T10:00:00", "performed_by": "staff1"},
         {"activity_type": "Nature Walk", "performed_datetime": "2026-05-02T10:00:00", "performed_by": "staff1"},
@@ -42,7 +42,7 @@ def test_activity_line_item_math():
     )
     activity_items = [i for i in bill["line_items"] if i["type"] == "Activity"]
     total = sum(i["amount"] for i in activity_items)
-    assert total == pytest.approx(30.00)
+    assert total == pytest.approx(20.00)
 
 
 def test_unperformed_activity_not_billed():

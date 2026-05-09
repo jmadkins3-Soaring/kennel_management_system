@@ -1,16 +1,18 @@
 {
   "nightly_rates": {
-    "XS": 25.00,
-    "S":  30.00,
-    "M":  35.00,
-    "L":  40.00,
-    "XL": 45.00
+    "XS": 60.00,
+    "S":  60.00,
+    "M":  60.00,
+    "L":  60.00,
+    "XL": 60.00
   },
+  "single_activity_price": 10.00,
+  "group_activity_price":   6.00,
   "activity_prices": {
-    "Nature Walk":               15.00,
+    "Nature Walk":               10.00,
     "Playtime":                  10.00,
-    "Medication Administration": 5.00,
-    "Emergency Grooming":        30.00,
-    "Play Yard":                 12.00
+    "Medication Administration": 10.00,
+    "Emergency Grooming":        10.00,
+    "Play Yard":                 10.00
   }
 }
