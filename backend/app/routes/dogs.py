@@ -63,8 +63,7 @@ async def create_dog(
     session: AsyncSession = Depends(get_session),
 ):
     """Create a new dog linked to an owner."""
-    # model_dump() serializes nested VaccinationRecord objects to plain dicts
-    data = body.model_dump()
+    data = body.model_dump(mode="json")
     dog = Dog.model_validate(data)
     session.add(dog)
     await session.commit()
@@ -96,8 +95,7 @@ async def update_dog(
     dog = await session.get(Dog, dog_id)
     if not dog:
         raise HTTPException(status_code=404, detail="Dog not found")
-    # model_dump() already converts nested VaccinationRecord objects to plain dicts
-    update_data = body.model_dump(exclude_unset=True)
+    update_data = body.model_dump(exclude_unset=True, mode="json")
     for field, value in update_data.items():
         setattr(dog, field, value)
     if "vaccination_records" in update_data:
@@ -137,7 +135,7 @@ async def add_vaccination(
     if not dog:
         raise HTTPException(status_code=404, detail="Dog not found")
     existing = dog.vaccination_records or []
-    existing.append(body.model_dump())
+    existing.append(body.model_dump(mode="json"))
     dog.vaccination_records = existing
     flag_modified(dog, "vaccination_records")
     dog.updated_at = datetime.now(timezone.utc)
@@ -162,7 +160,7 @@ async def update_vaccination(
     records = dog.vaccination_records or []
     if vacc_index < 0 or vacc_index >= len(records):
         raise HTTPException(status_code=404, detail="Vaccination record index out of range")
-    records[vacc_index] = body.model_dump()
+    records[vacc_index] = body.model_dump(mode="json")
     dog.vaccination_records = records
     flag_modified(dog, "vaccination_records")
     dog.updated_at = datetime.now(timezone.utc)

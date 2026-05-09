@@ -281,12 +281,12 @@ async def report_open_incidents(
         incident_dicts.append({
             "incident_id": inc.incident_id,
             "dog_name": dog.name if dog else "",
-            "incident_type": inc.incident_type.value,
+            "incident_type": inc.incident_type if isinstance(inc.incident_type, str) else inc.incident_type.value,
             "description": inc.description,
             "occurred_datetime": inc.occurred_datetime.isoformat(),
             "reported_by": inc.reported_by,
             "reported_at": inc.created_at.isoformat(),
-            "severity": inc.incident_type.value,
+            "severity": inc.incident_type if isinstance(inc.incident_type, str) else inc.incident_type.value,
         })
 
     # Unresolved issues
@@ -299,7 +299,7 @@ async def report_open_incidents(
         issue_dicts.append({
             "issue_id": issue.issue_id,
             "kennel_id": kennel.kennel_number if kennel else issue.kennel_id,
-            "issue_type": issue.issue_type.value,
+            "issue_type": issue.issue_type if isinstance(issue.issue_type, str) else issue.issue_type.value,
             "description": issue.description,
             "reported_datetime": issue.reported_datetime.isoformat(),
             "reported_by": issue.reported_by,
