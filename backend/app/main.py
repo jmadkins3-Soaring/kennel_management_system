@@ -163,7 +163,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/api/health", tags=["health"])
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint. Returns 503 if DB is unreachable."""
+    from sqlalchemy import text
+    try:
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("Health check DB probe failed")
+        return JSONResponse(status_code=503, content={"status": "degraded", "db": "unreachable"})
     return {"status": "ok"}
 
 

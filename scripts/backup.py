@@ -8,7 +8,7 @@ import json
 import os
 import shutil
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/config")
 DB_PATH = os.environ.get("DB_PATH", "/data/kennel.db")
@@ -20,7 +20,8 @@ def main():
 
     backup_path = system["backup_path"]
     retention_days = int(system["backup_retention_days"])
-    today = datetime.now().strftime("%Y-%m-%d")
+    now_utc = datetime.now(timezone.utc)
+    today = now_utc.strftime("%Y-%m-%d")
     dest = os.path.join(backup_path, f"kennel_db_{today}.sqlite")
 
     os.makedirs(backup_path, exist_ok=True)
@@ -28,13 +29,13 @@ def main():
     print(f"Backup written: {dest}", flush=True)
 
     # Prune old backups
-    cutoff = datetime.now() - timedelta(days=retention_days)
+    cutoff = now_utc - timedelta(days=retention_days)
     for filename in os.listdir(backup_path):
         if not filename.startswith("kennel_db_") or not filename.endswith(".sqlite"):
             continue
         date_str = filename[len("kennel_db_"):-len(".sqlite")]
         try:
-            file_date = datetime.strptime(date_str, "%Y-%m-%d")
+            file_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             if file_date < cutoff:
                 os.remove(os.path.join(backup_path, filename))
                 print(f"Pruned: {filename}", flush=True)

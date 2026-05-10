@@ -9,7 +9,12 @@ DB_PATH = os.environ.get("DB_PATH", "/data/kennel.db")
 DB_URL = f"sqlite+aiosqlite:///{DB_PATH}"
 SYNC_DB_URL = f"sqlite:///{DB_PATH}"
 
-async_engine = create_async_engine(DB_URL, echo=False)
+async_engine = create_async_engine(
+    DB_URL,
+    echo=False,
+    pool_pre_ping=True,
+    connect_args={"timeout": 30},
+)
 sync_engine = create_engine(SYNC_DB_URL, echo=False)
 
 AsyncSessionLocal = async_sessionmaker(
