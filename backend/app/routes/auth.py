@@ -1,7 +1,9 @@
 """Staff authentication routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -10,10 +12,13 @@ from ..auth import verify_password, create_access_token
 from ..models.staff_user import StaffUser
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+_limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/login", summary="Obtain a JWT access token")
+@_limiter.limit("10/minute")
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_session),
 ):

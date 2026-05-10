@@ -11,6 +11,9 @@ services:
       SMTP_PASSWORD: "${KMS_SMTP_PASSWORD:?KMS_SMTP_PASSWORD must be set}"
       RECEIPTS_DIR: /tmp/receipts
       REPORTS_DIR: /tmp/reports
+      CORS_ORIGINS: "${KMS_CORS_ORIGINS:-http://kennel.soaringheights.local}"
+      LOG_LEVEL: "${KMS_LOG_LEVEL:-INFO}"
+      KMS_INIT_DB: "${KMS_INIT_DB:-0}"
     volumes:
       - ./config:/config:ro
       - kennel_data:/data

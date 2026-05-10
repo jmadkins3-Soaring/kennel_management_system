@@ -24,7 +24,10 @@ router = APIRouter(prefix="/api/portal", tags=["portal"])
 # ---------------------------------------------------------------------------
 # Token config
 # ---------------------------------------------------------------------------
-PORTAL_SECRET = os.environ.get("SECRET_KEY", "CHANGE_ME_IN_PRODUCTION_use_openssl_rand_hex_32")
+PORTAL_SECRET = (
+    os.environ.get("PORTAL_SECRET_KEY")
+    or os.environ.get("SECRET_KEY", "CHANGE_ME_IN_PRODUCTION_use_openssl_rand_hex_32")
+)
 PORTAL_ALGORITHM = "HS256"
 PORTAL_EXPIRY_DAYS = 7  # matches system.json portal_link_expiry_days
 SESSION_EXPIRY_MINUTES = 60

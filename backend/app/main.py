@@ -1,11 +1,18 @@
 """FastAPI application entry point. Registers all routers and runs startup tasks."""
 
 import logging
+import logging.config
 import os
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from .database import async_engine
 from .routes import (
@@ -14,7 +21,39 @@ from .routes import (
     issues, calendar, search, reports, portal,
 )
 
+# ---------------------------------------------------------------------------
+# Logging — structured JSON-style output suitable for container log drivers
+# ---------------------------------------------------------------------------
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "format": '{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}',
+            "datefmt": "%Y-%m-%dT%H:%M:%SZ",
+        }
+    },
+    "handlers": {
+        "stdout": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "stream": "ext://sys.stdout",
+        }
+    },
+    "root": {"level": os.environ.get("LOG_LEVEL", "INFO"), "handlers": ["stdout"]},
+})
+
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Rate limiter (shared across the app; auth router adds its own limit)
+# ---------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address)
+
+# ---------------------------------------------------------------------------
+# Max request body size — 1 MB is generous for this JSON-only API
+# ---------------------------------------------------------------------------
+_MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", 1_048_576))  # 1 MB
 
 
 _INSECURE_SECRET = "CHANGE_ME_IN_PRODUCTION"
@@ -42,12 +81,22 @@ async def lifespan(app: FastAPI):
     _validate_secrets()
     logger.info("Starting Kennel Management System backend")
     await _run_migrations()
-    await _provision_kennels()
-    await _seed_activity_types()
+    if os.environ.get("KMS_INIT_DB", "").lower() in ("1", "true", "yes"):
+        logger.info("KMS_INIT_DB set — running provisioning and seeding")
+        await _provision_kennels()
+        await _seed_activity_types()
+    else:
+        logger.info("KMS_INIT_DB not set — skipping provisioning/seeding")
     yield
     logger.info("Shutting down")
     await async_engine.dispose()
 
+
+# ---------------------------------------------------------------------------
+# CORS — origins configurable via CORS_ORIGINS env var (comma-separated)
+# ---------------------------------------------------------------------------
+_default_origins = "http://localhost:9100,http://kennel.soaringheights.local"
+_cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
 
 app = FastAPI(
     title="Soaring Heights Kennel Management System",
@@ -56,12 +105,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:9100", "http://kennel.soaringheights.local"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 for router in [
@@ -71,6 +124,41 @@ for router in [
     calendar.router, search.router, reports.router, portal.router,
 ]:
     app.include_router(router)
+
+
+# ---------------------------------------------------------------------------
+# Request size limit middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# Request logging middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response: Response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        '{"method":"%s","path":"%s","status":%d,"duration_ms":%.1f}',
+        request.method, request.url.path, response.status_code, duration_ms,
+    )
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Global exception handler — never expose internal details to clients
+# ---------------------------------------------------------------------------
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/api/health", tags=["health"])
