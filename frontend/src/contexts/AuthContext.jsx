@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback } from 'react'
 import { login as apiLogin } from '../api/auth'
+import { getMe } from '../api/users'
 
 const AuthContext = createContext(null)
 
@@ -11,8 +12,10 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     const data = await apiLogin(username, password)
     localStorage.setItem('kms_token', data.access_token)
-    localStorage.setItem('kms_user', JSON.stringify({ username }))
-    setUser({ username })
+    const me = await getMe()
+    const userData = { username: me.username, role: me.role }
+    localStorage.setItem('kms_user', JSON.stringify(userData))
+    setUser(userData)
   }, [])
 
   const logout = useCallback(() => {

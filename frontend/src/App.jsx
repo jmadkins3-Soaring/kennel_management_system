@@ -8,11 +8,19 @@ import OwnersPage from './pages/Owners/OwnersPage'
 import KennelsPage from './pages/Kennels/KennelsPage'
 import ActivitiesPage from './pages/Activities/ActivitiesPage'
 import ReportsPage from './pages/Reports/ReportsPage'
+import UsersPage from './pages/Users/UsersPage'
 import { PortalEntry } from './pages/Portal/PortalApp'
 
 function PrivateRoute({ children }) {
   const { user } = useAuth()
   return user ? children : <Navigate to="/login" replace />
+}
+
+function AdminRoute({ children }) {
+  const { user } = useAuth()
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role !== 'admin') return <Navigate to="/calendar" replace />
+  return children
 }
 
 function AppRoutes() {
@@ -27,6 +35,7 @@ function AppRoutes() {
       <Route path="/kennels"       element={<PrivateRoute><KennelsPage /></PrivateRoute>} />
       <Route path="/activities"    element={<PrivateRoute><ActivitiesPage /></PrivateRoute>} />
       <Route path="/reports"       element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
+      <Route path="/users"         element={<AdminRoute><UsersPage /></AdminRoute>} />
       <Route path="*"              element={<Navigate to="/calendar" replace />} />
     </Routes>
   )

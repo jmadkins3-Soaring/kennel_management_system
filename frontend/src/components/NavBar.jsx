@@ -60,6 +60,9 @@ export default function NavBar() {
         <NavLink to="/kennels"      className={({ isActive }) => isActive ? 'active' : ''}>Kennels</NavLink>
         <NavLink to="/reports"      className={({ isActive }) => isActive ? 'active' : ''}>Reports</NavLink>
         <NavLink to="/activities"   className={({ isActive }) => isActive ? 'active' : ''}>Activities</NavLink>
+        {user?.role === 'admin' && (
+          <NavLink to="/users" className={({ isActive }) => isActive ? 'active' : ''}>Users</NavLink>
+        )}
       </div>
 
       <div className="navbar-search" ref={wrapRef}>

@@ -58,3 +58,37 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return username
+
+
+async def get_current_staff_user(
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_session),
+):
+    """FastAPI dependency: decodes JWT and returns the full StaffUser object."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: Optional[str] = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    from sqlmodel import select
+    from .models.staff_user import StaffUser
+    result = await session.exec(select(StaffUser).where(StaffUser.username == username, StaffUser.active == True))
+    user = result.first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+async def require_admin(user=Depends(get_current_staff_user)):
+    """FastAPI dependency: raises 403 unless the authenticated user has the admin role."""
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    return user

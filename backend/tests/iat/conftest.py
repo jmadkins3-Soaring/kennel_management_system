@@ -55,11 +55,18 @@ SEED_ACTIVITY_TYPES = [
 
 
 async def _seed_iat_db(session: AsyncSession) -> None:
-    """Seed staff user, kennels, and activity types for IAT tests."""
+    """Seed staff user, admin user, kennels, and activity types for IAT tests."""
     session.add(StaffUser(
         user_id=str(uuid.uuid4()),
         username="iat_staff",
         password_hash=hash_password("iat_pass"),
+        role="staff",
+    ))
+    session.add(StaffUser(
+        user_id=str(uuid.uuid4()),
+        username="iat_admin",
+        password_hash=hash_password("iat_admin_pass"),
+        role="admin",
     ))
     for i, kt in enumerate([
         {"type": "Large", "max_size_class": "XL", "sqft": 30.0},
@@ -120,6 +127,16 @@ def iat_token() -> str:
 @pytest.fixture
 def iat_headers(iat_token) -> dict:
     return {"Authorization": f"Bearer {iat_token}"}
+
+
+@pytest.fixture
+def iat_admin_token() -> str:
+    return create_access_token("iat_admin", expires_delta=timedelta(days=365))
+
+
+@pytest.fixture
+def iat_admin_headers(iat_admin_token) -> dict:
+    return {"Authorization": f"Bearer {iat_admin_token}"}
 
 
 @pytest.fixture

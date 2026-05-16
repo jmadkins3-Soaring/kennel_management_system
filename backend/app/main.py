@@ -18,7 +18,7 @@ from .database import async_engine
 from .routes import (
     auth, owners, dogs, kennels, reservations,
     bills, activities, activity_types, incidents,
-    issues, calendar, search, reports, portal,
+    issues, calendar, search, reports, portal, users,
 )
 
 # ---------------------------------------------------------------------------
@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI):
     _validate_secrets()
     logger.info("Starting Kennel Management System backend")
     await _run_migrations()
+    await _bootstrap_admin()
     if os.environ.get("KMS_INIT_DB", "").lower() in ("1", "true", "yes"):
         logger.info("KMS_INIT_DB set — running provisioning and seeding")
         await _provision_kennels()
@@ -118,7 +119,7 @@ app.add_middleware(
 )
 
 for router in [
-    auth.router, owners.router, dogs.router, kennels.router,
+    auth.router, users.router, owners.router, dogs.router, kennels.router,
     reservations.router, bills.router, activities.router,
     activity_types.router, incidents.router, issues.router,
     calendar.router, search.router, reports.router, portal.router,
@@ -209,6 +210,33 @@ async def _run_migrations() -> None:
                     await conn.execute(text(stmt))
                 await conn.execute(text("INSERT INTO schema_migrations (filename) VALUES (:f)"), {"f": filename})
                 logger.info("Migration applied: %s", filename)
+
+
+async def _bootstrap_admin() -> None:
+    """If staff_users is empty and ADMIN_USERNAME/ADMIN_PASSWORD are set, create the first admin."""
+    admin_username = os.environ.get("ADMIN_USERNAME", "").strip()
+    admin_password = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if not admin_username or not admin_password:
+        return
+
+    from sqlmodel import select
+    from .models.staff_user import StaffUser
+    from .auth import hash_password
+    from .database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        existing = await session.exec(select(StaffUser))
+        if existing.first():
+            logger.info("staff_users not empty — skipping admin bootstrap")
+            return
+        session.add(StaffUser(
+            username=admin_username,
+            password_hash=hash_password(admin_password),
+            role="admin",
+            active=True,
+        ))
+        await session.commit()
+        logger.info("Admin user bootstrapped: %s", admin_username)
 
 
 async def _provision_kennels() -> None:

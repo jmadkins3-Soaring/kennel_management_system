@@ -62,16 +62,32 @@ async def client(session) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest.fixture
 async def staff_user(session) -> dict:
-    """Insert a test staff user and return credentials."""
+    """Insert a test staff user (role=staff) and return credentials."""
     from app.models.staff_user import StaffUser
     user = StaffUser(
         user_id=str(uuid.uuid4()),
         username="teststaff",
         password_hash=hash_password("testpass123"),
+        role="staff",
     )
     session.add(user)
     await session.commit()
-    return {"username": "teststaff", "password": "testpass123"}
+    return {"username": "teststaff", "password": "testpass123", "role": "staff"}
+
+
+@pytest.fixture
+async def admin_user(session) -> dict:
+    """Insert a test admin user and return credentials."""
+    from app.models.staff_user import StaffUser
+    user = StaffUser(
+        user_id=str(uuid.uuid4()),
+        username="testadmin",
+        password_hash=hash_password("adminpass123"),
+        role="admin",
+    )
+    session.add(user)
+    await session.commit()
+    return {"username": "testadmin", "password": "adminpass123", "role": "admin"}
 
 
 @pytest.fixture
@@ -80,8 +96,18 @@ def staff_token(staff_user) -> str:
 
 
 @pytest.fixture
+def admin_token(admin_user) -> str:
+    return create_access_token(admin_user["username"])
+
+
+@pytest.fixture
 def auth_headers(staff_token) -> dict:
     return {"Authorization": f"Bearer {staff_token}"}
+
+
+@pytest.fixture
+def admin_headers(admin_token) -> dict:
+    return {"Authorization": f"Bearer {admin_token}"}
 
 
 # ── Domain object helpers ──────────────────────────────────────────────────────
